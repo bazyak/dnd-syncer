@@ -1,0 +1,40 @@
+[versions]
+agp = "8.13.0"
+kotlin = "2.2.0"
+coreKtx = "1.17.0"
+lifecycle = "2.9.4"
+activityCompose = "1.11.0"
+composeBom = "2025.09.00"
+wearCompose = "1.5.0"
+wearToolingPreview = "1.0.0"
+playServicesWearable = "19.0.0"
+coroutinesPlayServices = "1.10.2"
+shizuku = "13.1.5"
+
+[libraries]
+androidx-core-ktx           = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
+androidx-lifecycle-runtime  = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycle" }
+androidx-lifecycle-compose  = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
+androidx-activity-compose   = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
+
+compose-bom                 = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
+compose-ui                  = { module = "androidx.compose.ui:ui" }
+compose-ui-tooling-preview  = { module = "androidx.compose.ui:ui-tooling-preview" }
+compose-ui-tooling          = { module = "androidx.compose.ui:ui-tooling" }
+compose-material3           = { module = "androidx.compose.material3:material3" }
+
+wear-compose-material3      = { module = "androidx.wear.compose:compose-material3", version.ref = "wearCompose" }
+wear-compose-foundation     = { module = "androidx.wear.compose:compose-foundation", version.ref = "wearCompose" }
+wear-tooling-preview        = { module = "androidx.wear:wear-tooling-preview", version.ref = "wearToolingPreview" }
+
+play-services-wearable      = { module = "com.google.android.gms:play-services-wearable", version.ref = "playServicesWearable" }
+coroutines-play-services    = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "coroutinesPlayServices" }
+
+shizuku-api                 = { module = "dev.rikka.shizuku:api", version.ref = "shizuku" }
+shizuku-provider            = { module = "dev.rikka.shizuku:provider", version.ref = "shizuku" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library     = { id = "com.android.library", version.ref = "agp" }
+kotlin-android      = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-compose      = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

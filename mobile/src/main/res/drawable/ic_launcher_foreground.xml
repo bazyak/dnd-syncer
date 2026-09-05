@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Пиктограмма "не беспокоить": круг с вырезанной горизонтальной полосой.
+  Полоса именно вырезана (fillType evenOdd), а не нарисована фоновым цветом,
+  иначе иконка ломалась бы в монохромном режиме тем Android.
+
+  Холст адаптивной иконки 108x108, безопасная зона — центральные 66dp.
+  Круг диаметром 41.4dp: по площади ровно в 1.7 раза меньше
+  исходного варианта с диаметром 54dp (диаметр делится на корень из 1.7).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M54,33.3 A20.7,20.7 0 1 1 54,74.7 A20.7,20.7 0 1 1 54,33.3 Z M45.95,51.51 L62.05,51.51 A2.49,2.49 0 0 1 62.05,56.49 L45.95,56.49 A2.49,2.49 0 0 1 45.95,51.51 Z" />
+</vector>

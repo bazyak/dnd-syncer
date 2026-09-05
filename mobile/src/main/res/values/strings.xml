@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DND syncer</string>
+    <string name="accessibility_description">Нужен только чтобы приложение
+        оставалось активным и отслеживало смену режимов. Содержимое экрана
+        и уведомления не читаются.</string>
+</resources>

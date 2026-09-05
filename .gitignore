@@ -1,0 +1,33 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+.navigation/
+output.json
+
+# Сборочные артефакты
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+release/
+dist/
+
+# Нативная сборка
+.externalNativeBuild/
+.cxx/
+
+# Ключи подписи — в репозиторий не должны попадать никогда
+*.jks
+*.keystore
+keystore.properties
+
+# macOS
+.DS_Store
