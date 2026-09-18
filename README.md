@@ -1,6 +1,6 @@
 # DND syncer
 
-**English** · [Русский](README.md)
+**English** · [Русский](README.ru.md)
 
 Keeps Do Not Disturb, theater mode and bedtime mode in sync between a Pixel 10
 Pro (Android 17, rooted) and a OnePlus Watch 4 (Wear OS 6 / Android 16). No
