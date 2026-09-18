@@ -4,8 +4,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-val appVersionName = rootProject.extra["appVersionName"] as String
-val appVersionCode = rootProject.extra["appVersionCode"] as Int
+val appVersionName = rootProject.extra["wearVersionName"] as String
+val appVersionCode = rootProject.extra["wearVersionCode"] as Int
 
 android {
     namespace = "com.bazyak.dndsyncer.wear"

@@ -1,7 +1,7 @@
 package com.bazyak.dndsyncer.phone
 
 import android.content.Context
-import android.util.Log
+import com.bazyak.dndsyncer.core.FileLog
 import com.bazyak.dndsyncer.core.RootShell
 
 /**
@@ -18,6 +18,12 @@ object PhoneNight {
 
     fun isOn(): Boolean = ZenDump.read()?.night ?: false
 
+    /** Ручной сбор полного среза в лог — кнопкой с экрана телефона. */
+    fun logSnapshot() {
+        FileLog.d(TAG, "--- ручной срез ---")
+        ZenDump.read(verbose = true)
+    }
+
     /**
      * Правило ночного режима принадлежит Digital Wellbeing, и активировать
      * чужое правило из процесса приложения нельзя: вызов проходит без ошибки,
@@ -31,11 +37,11 @@ object PhoneNight {
     fun setOn(context: Context, on: Boolean): Boolean {
         val dump = ZenDump.read()
         val id = dump?.bedtimeRuleId ?: run {
-            Log.w(TAG, "Правило ночного режима не найдено")
+            FileLog.w(TAG, "правило ночного режима не найдено")
             return false
         }
         val conditionId = dump.bedtimeConditionId?.takeIf { it.isNotBlank() } ?: run {
-            Log.w(TAG, "У правила нет conditionId")
+            FileLog.w(TAG, "у правила нет conditionId")
             return false
         }
 
@@ -45,13 +51,19 @@ object PhoneNight {
 
         // Сначала от системы — именно этот uid проходит проверку.
         // Если Magisk не даст сменить uid, пробуем от рута.
+        FileLog.d(TAG, "команда: $command")
         for (uid in listOf(SYSTEM_UID, null)) {
             val output = RootShell.execAs(uid, command)
+            FileLog.d(TAG, "uid=${uid ?: "root"} → ${output?.trim()?.ifEmpty { "(пусто)" }}")
             if (output != null && output.contains("OK")) {
-                Log.d(TAG, "Ночной режим ${if (on) "включён" else "выключен"} (uid=$uid)")
-                return true
+                // Проверяем по факту: команда может отработать вхолостую,
+                // если система откажется трогать чужое правило.
+                Thread.sleep(VERIFY_DELAY_MS)
+                val after = ZenDump.read()?.night
+                FileLog.d(TAG, "после команды night=$after (ожидалось $on)")
+                if (after == on) return true
+                FileLog.w(TAG, "команда прошла, но состояние не изменилось")
             }
-            Log.w(TAG, "uid=$uid не сработал: ${output?.trim()}")
         }
         return false
     }
@@ -70,4 +82,5 @@ object PhoneNight {
     private const val TAG = "PhoneNight"
     private const val HELPER = "com.bazyak.dndsyncer.phone.NightHelper"
     private const val SYSTEM_UID = 1000
+    private const val VERIFY_DELAY_MS = 600L
 }

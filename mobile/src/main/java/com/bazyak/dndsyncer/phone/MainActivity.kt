@@ -1,9 +1,12 @@
 package com.bazyak.dndsyncer.phone
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +22,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -34,6 +38,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.bazyak.dndsyncer.core.Access
+import com.bazyak.dndsyncer.core.FileLog
+import com.bazyak.dndsyncer.core.LogSettings
 import com.bazyak.dndsyncer.core.Shell
 
 class MainActivity : ComponentActivity() {
@@ -111,9 +117,11 @@ private fun WelcomeScreen() {
             )
 
             if (rules.isNotEmpty()) {
-                Text("Правила режимов", style = MaterialTheme.typography.titleSmall)
+                Text("Состояние режимов", style = MaterialTheme.typography.titleSmall)
                 Text(rules, style = MaterialTheme.typography.bodySmall)
             }
+
+            LogCard()
         }
     }
 }
@@ -152,6 +160,72 @@ private fun PermissionCard(
                 )
                 if (!granted) Button(onClick = onGrant) { Text("Разрешить") }
             }
+        }
+    }
+}
+
+@Composable
+private fun LogCard() {
+    val context = LocalContext.current
+    var enabled by remember { mutableStateOf(LogSettings.isEnabled(context)) }
+    var path by remember { mutableStateOf(PhoneApp.store?.describe().orEmpty()) }
+
+    // Системный выбор папки. Постоянный доступ нужен, чтобы писать и после
+    // перезагрузки: без takePersistableUriPermission разрешение живёт
+    // до конца процесса.
+    val pickFolder = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        if (uri != null) {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+            LogSettings.setFolder(context, uri)
+            path = PhoneApp.store?.describe().orEmpty()
+        }
+    }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Писать лог", style = MaterialTheme.typography.titleMedium)
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = {
+                        enabled = it
+                        LogSettings.setEnabled(context, it)
+                    },
+                )
+            }
+
+            Text(path, style = MaterialTheme.typography.bodySmall)
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { pickFolder.launch(null) }) { Text("Папка") }
+
+                if (LogSettings.folder(context) != null) {
+                    Button(onClick = {
+                        LogSettings.setFolder(context, null)
+                        path = PhoneApp.store?.describe().orEmpty()
+                    }) { Text("По умолчанию") }
+                }
+            }
+
+            Button(
+                onClick = {
+                    Thread { PhoneNight.logSnapshot() }.start()
+                    Toast.makeText(context, "Срез записан", Toast.LENGTH_SHORT).show()
+                },
+                enabled = enabled,
+            ) { Text("Записать срез в лог") }
         }
     }
 }

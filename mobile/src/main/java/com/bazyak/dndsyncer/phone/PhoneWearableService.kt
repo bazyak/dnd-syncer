@@ -1,9 +1,10 @@
 package com.bazyak.dndsyncer.phone
 
-import android.util.Log
 import com.bazyak.dndsyncer.core.Dnd
+import com.bazyak.dndsyncer.core.FileLog
 import com.bazyak.dndsyncer.core.Sync
 import com.bazyak.dndsyncer.core.SyncReceiver
+import com.bazyak.dndsyncer.core.Zen
 import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.WearableListenerService
 
@@ -14,20 +15,44 @@ import com.google.android.gms.wearable.WearableListenerService
 class PhoneWearableService : WearableListenerService() {
 
     override fun onDataChanged(dataEvents: DataEventBuffer) {
-        val (incoming, reason) = SyncReceiver.parse(dataEvents, Sync.PATH_WATCH) ?: return
+        val update = SyncReceiver.parse(dataEvents, Sync.PATH_WATCH) ?: run {
+            FileLog.d(TAG, "событие не про нас, пропускаю")
+            return
+        }
+        val incoming = update.state
         val current = PhoneSyncService.snapshot(this)
-        if (incoming == current) {
-            Log.d(TAG, "← $incoming ($reason) — совпадает, ничего не делаю")
+        FileLog.d(
+            TAG,
+            "ПОЛУЧЕНО с часов: dnd=${incoming.dnd}${mark(update.dndChanged)} " +
+                "night=${incoming.night}${mark(update.nightChanged)} " +
+                "причина=${update.reason} | у себя: dnd=${current.dnd} night=${current.night} | " +
+                Zen.describe(contentResolver),
+        )
+
+        // Применяем только то, что часы у себя ИЗМЕНИЛИ. Остальные поля —
+        // их текущее состояние, а не команда: именно так застарелый
+        // bedtime_mode с часов возвращал телефон в уже законченную ночь.
+        val applyDnd = update.dndChanged && incoming.dnd != current.dnd
+        val applyNight = update.nightChanged && incoming.night != current.night
+        if (!applyDnd && !applyNight) {
+            FileLog.d(TAG, "менять нечего")
             return
         }
 
-        Log.d(TAG, "← dnd=${incoming.dnd} night=${incoming.night} ($reason), было $current")
-
-        if (incoming.night != current.night) PhoneNight.setOn(this, incoming.night)
-        if (incoming.dnd != current.dnd) {
+        if (applyNight) {
+            FileLog.d(TAG, "МЕНЯЮ ночь: ${current.night} → ${incoming.night}")
+            PhoneNight.setOn(this, incoming.night)
+        }
+        if (applyDnd) {
+            FileLog.d(TAG, "МЕНЯЮ dnd: ${current.dnd} → ${incoming.dnd}")
             Dnd.set(this, incoming.dnd)
         }
+
+        val after = PhoneSyncService.snapshot(this)
+        FileLog.d(TAG, "после применения: dnd=${after.dnd} night=${after.night}")
     }
+
+    private fun mark(changed: Boolean) = if (changed) " (ИЗМЕНЕНО)" else ""
 
     private companion object {
         const val TAG = "PhoneWearable"

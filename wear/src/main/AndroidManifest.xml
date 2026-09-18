@@ -9,6 +9,10 @@
     <!-- Единственное уведомление: синхронизация не отработала из-за Wi-Fi. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Без него ConnectivityService отшивает и registerNetworkCallback,
+         и getNetworkCapabilities: приложение не видит, есть ли Wi-Fi. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <uses-feature android:name="android.hardware.type.watch" />
 
     <!-- Запись theater_mode_on и bedtime_mode. Выдаётся через adb:
@@ -19,6 +23,7 @@
         xmlns:tools="http://schemas.android.com/tools" />
 
     <application
+        android:name=".WatchApp"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"

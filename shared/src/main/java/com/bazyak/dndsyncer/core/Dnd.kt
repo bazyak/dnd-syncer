@@ -1,7 +1,6 @@
 package com.bazyak.dndsyncer.core
 
 import android.content.Context
-import android.util.Log
 
 /**
  * Переключение "Не беспокоить".
@@ -17,13 +16,21 @@ object Dnd {
     fun isOn(context: Context): Boolean = Zen.zen(context.contentResolver) != 0
 
     fun set(context: Context, on: Boolean): Boolean {
-        if (isOn(context) == on) return true
+        FileLog.d(TAG, "set(dnd=$on), сейчас: ${Zen.describe(context.contentResolver)}")
+        if (isOn(context) == on) {
+            FileLog.d(TAG, "уже в нужном состоянии, ничего не делаю")
+            return true
+        }
         if (!Shell.isAvailable()) {
-            Log.w(TAG, "Нет привилегированного доступа")
+            FileLog.w(TAG, "нет привилегированного доступа")
             return false
         }
-        Shell.exec("cmd notification set_dnd ${if (on) "priority" else "off"}")
-        return settled(context, on)
+        val command = "cmd notification set_dnd ${if (on) "priority" else "off"}"
+        val output = Shell.exec(command)
+        FileLog.d(TAG, "[${Shell.backend()}] $command → ${output?.trim()?.ifEmpty { "(пусто)" }}")
+        val ok = settled(context, on)
+        FileLog.d(TAG, "после: ${Zen.describe(context.contentResolver)} успех=$ok")
+        return ok
     }
 
     /** Системе нужно мгновение на применение, поэтому проверяем с ретраем. */
@@ -32,7 +39,7 @@ object Dnd {
             if (isOn(context) == expected) return true
             Thread.sleep(RETRY_MS)
         }
-        Log.w(TAG, "DND=$expected не применился")
+        FileLog.w(TAG, "DND=$expected не применился за ${RETRIES * RETRY_MS} мс")
         return false
     }
 

@@ -1,7 +1,6 @@
 package com.bazyak.dndsyncer.wear
 
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -27,8 +26,11 @@ import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
+import androidx.wear.compose.material3.SwitchButton
 import androidx.wear.compose.material3.Text
 import com.bazyak.dndsyncer.core.Access
+import com.bazyak.dndsyncer.core.FileLog
+import com.bazyak.dndsyncer.core.LogSettings
 import com.bazyak.dndsyncer.core.Shell
 import com.bazyak.dndsyncer.core.ShizukuShell
 import com.bazyak.dndsyncer.core.Zen
@@ -156,7 +158,7 @@ private fun WelcomeScreen() {
                                 Toast.makeText(context, "Поднимаю…", Toast.LENGTH_SHORT).show()
                                 Thread {
                                     val result = ShizukuStarter.ensureRunning(context)
-                                    Log.d("MainActivity", "Ручной запуск: $result")
+                                    FileLog.d("MainActivity", "Ручной запуск Shizuku: $result")
                                 }.start()
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -166,6 +168,21 @@ private fun WelcomeScreen() {
             }
 
             item { AdbItem("Запись системных настроек", secure) }
+
+            item {
+                var logging by remember { mutableStateOf(LogSettings.isEnabled(context)) }
+                SwitchButton(
+                    checked = logging,
+                    onCheckedChange = {
+                        logging = it
+                        LogSettings.setEnabled(context, it)
+                    },
+                    label = { Text("Логирование") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                )
+            }
 
             item {
                 Centered(

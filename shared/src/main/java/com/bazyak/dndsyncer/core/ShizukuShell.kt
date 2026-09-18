@@ -54,9 +54,9 @@ object ShizukuShell {
 
         val output = BufferedReader(InputStreamReader(process.inputStream)).use { it.readText() }
         process.waitFor()
-        Log.d(TAG, "$command → ${output.trim()}")
+        FileLog.d(TAG, "shizuku: $command → ${FileLog.brief(output)}")
         output
-    }.onFailure { Log.w(TAG, "Shizuku exec не удался: $it") }.getOrNull()
+    }.onFailure { FileLog.w(TAG, "Shizuku exec не удался: $it") }.getOrNull()
 
     private const val TAG = "ShizukuShell"
 }

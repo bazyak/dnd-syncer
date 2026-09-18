@@ -1,11 +1,13 @@
 package com.bazyak.dndsyncer.phone
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Context
 import android.database.ContentObserver
-import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import com.bazyak.dndsyncer.core.DndSync
+import com.bazyak.dndsyncer.core.FileLog
 import com.bazyak.dndsyncer.core.ModeState
+import com.bazyak.dndsyncer.core.Shell
 import com.bazyak.dndsyncer.core.Sync
 import com.bazyak.dndsyncer.core.Zen
 import kotlinx.coroutines.CoroutineScope
@@ -17,9 +19,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Телефонная сторона. DND читается из Settings.Global["zen_mode"] — он меняется
- * при любом источнике тишины, включая срабатывание расписания, поэтому
- * NotificationListenerService (и чтение уведомлений) не нужен.
+ * Телефонная сторона. DND читается из dumpsys, а триггером служат ключи
+ * Settings.Global — zen_mode меняется при любом источнике тишины, а etag
+ * при любой правке zen-конфига, включая активацию автоправил.
  */
 class PhoneSyncService : AccessibilityService() {
 
@@ -29,8 +31,9 @@ class PhoneSyncService : AccessibilityService() {
     private var pending: Job? = null
 
     override fun onServiceConnected() {
-        Log.d(TAG, "Сервис подключён")
-        observer = Zen.observe(this) { schedule("phone") }
+        FileLog.d(TAG, "СЕРВИС ПОДКЛЮЧЁН. ${Zen.describe(contentResolver)}")
+        FileLog.d(TAG, "shell=${Shell.backend()}")
+        observer = Zen.observe(this) { key -> schedule("phone:$key") }
         schedule("connected")
     }
 
@@ -38,16 +41,32 @@ class PhoneSyncService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     private fun schedule(reason: String) {
+        FileLog.d(TAG, "СИГНАЛ [$reason] ${Zen.describe(contentResolver)}")
+        val had = pending?.isActive == true
         pending?.cancel()
+        if (had) FileLog.d(TAG, "предыдущая отложенная публикация отменена")
+
         pending = scope.launch {
             delay(SETTLE_MS)
-            val state = snapshot(this@PhoneSyncService)
-            Log.d(TAG, "zen=${Zen.zen(contentResolver)} → $state")
+            // verbose: в момент публикации нужен полный расклад правил,
+            // иначе потом не понять, кто поменял состояние.
+            val dump = ZenDump.read(verbose = true)
+            val state = if (dump != null) {
+                ModeState(dnd = dump.dnd, night = dump.night)
+            } else {
+                ModeState(dnd = Zen.zen(contentResolver) != 0, night = false)
+            }
+            FileLog.d(
+                TAG,
+                "ПУБЛИКУЮ [$reason] ${Zen.describe(contentResolver)} → " +
+                    "dnd=${state.dnd} night=${state.night}",
+            )
             sync.publish(state, reason)
         }
     }
 
     override fun onDestroy() {
+        FileLog.w(TAG, "СЕРВИС ОСТАНОВЛЕН")
         observer?.let { contentResolver.unregisterContentObserver(it) }
         scope.cancel()
         super.onDestroy()
@@ -57,15 +76,8 @@ class PhoneSyncService : AccessibilityService() {
         private const val TAG = "PhoneSync"
         private const val SETTLE_MS = 700L
 
-        /**
-         * Состояние берём из дампа: zen_mode один на оба режима и различить
-         * ночь от DND по нему нельзя. Если привилегированного доступа нет,
-         * падаем на zen_mode — тогда ночь неотличима, но DND хотя бы работает.
-         */
-        fun snapshot(context: android.content.Context): ModeState {
-            ZenDump.read()?.let {
-                return ModeState(dnd = it.dnd, night = it.night)
-            }
+        fun snapshot(context: Context): ModeState {
+            ZenDump.read()?.let { return ModeState(dnd = it.dnd, night = it.night) }
             return ModeState(dnd = Zen.zen(context.contentResolver) != 0, night = false)
         }
     }

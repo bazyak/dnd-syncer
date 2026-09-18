@@ -5,7 +5,7 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.bazyak.dndsyncer.core.FileLog
 import java.util.Calendar
 import kotlin.concurrent.thread
 
@@ -17,7 +17,7 @@ import kotlin.concurrent.thread
 class ShizukuKeepAliveReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        Log.d(TAG, "Сработал: ${intent.action}")
+        FileLog.d(TAG, "Сработал: ${intent.action}")
         schedule(context)
 
         val pending = goAsync()
@@ -64,7 +64,7 @@ class ShizukuKeepAliveReceiver : BroadcastReceiver() {
                 60 * 60 * 1000L,
                 pending,
             )
-            Log.d(TAG, "Следующая попытка: ${next.time}")
+            FileLog.d(TAG, "Следующая попытка: ${next.time}")
         }
     }
 }

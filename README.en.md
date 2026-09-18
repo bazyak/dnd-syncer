@@ -144,7 +144,7 @@ adb -s <watch> install -r wear/build/outputs/apk/debug/wear-debug.apk
 ```
 
 Both APKs share one `applicationId` and must be signed with the same key,
-otherwise the Data Layer will not treat them as one app.
+otherwise the Data Layer will not treat them as one app. Their versions may differ.
 
 ### Shizuku on the watch
 
@@ -174,15 +174,22 @@ and Shizuku tries to enable wireless debugging exactly once at boot — there is
 no network at that moment and it never retries. So the app walks the chain
 itself:
 
-1. `Settings.Global["wifi_on"] = 1` and wait for the network;
+1. wait for Wi-Fi via `registerNetworkCallback`;
 2. `Settings.Global["adb_wifi_enabled"] = 1`;
 3. Shizuku's official auto-start intent:
    `moe.shizuku.privileged.api.START` with the `auth` extra.
 
-This runs on the first command from the phone whenever Shizuku is not
-responding, and once a day around 4 AM, when the watch is almost certainly
-charging next to the home Wi-Fi. If there is no network, a notification on the
-watch asks you to move closer and retry.
+**We cannot turn the network on.** Verified on the OnePlus Watch 4: writing
+`adb_wifi_enabled` really does toggle wireless debugging, while `wifi_on` is a
+mirror — the value is stored but Wi-Fi stays off. `WifiManager.setWifiEnabled()`
+has been closed to ordinary apps since Android 10 and there is no way around it.
+So after a reboot Wi-Fi has to be switched on by hand, once, from the watch's
+Wi-Fi menu.
+
+Everything after that is automatic: the network callback stays registered, so it
+covers not just boot but any Wi-Fi drop — come home, the network returns, Shizuku
+comes back on its own. Plus attempts at boot, on the first command from the
+phone, and once a day around 4 AM.
 
 **The token is required.** Find it in Shizuku itself: "Use Shizuku in automation
 apps" → "View intents" → Extras → `auth`. Put it in `gradle.properties`:
@@ -196,11 +203,25 @@ one, so rebuild after doing that.
 
 ## Versions and APK names
 
-The version number lives in `version.properties` at the root and bumps itself
-on every build (`assemble`, `install`, `bundle`); sync and clean leave it alone.
-It is computed once in the root `build.gradle.kts` and handed to both modules —
-otherwise the phone and the watch would drift apart, and the Data Layer requires
-matching versions across the pair.
+Versions live in `version.properties` at the root, are computed once in the root
+`build.gradle.kts` and handed to the modules. The phone and the watch keep
+separate counters: a change often touches only one of them.
+
+Build rules:
+
+| situation | result |
+|---|---|
+| versions equal | the module being built is bumped |
+| building the lagging one | it is aligned to the leading one, no bump |
+| building the leading one | it is bumped further |
+| building both at once | both get `max + 1` |
+
+`versionCode` only ever grows during alignment — otherwise installing over a
+previous build would be rejected. Sync and clean leave the numbers alone.
+
+Matching versions across the pair are not required: the Data Layer links the
+APKs by `applicationId` and signing key. The rules above exist so drift collapses
+at the first shared build instead of accumulating forever.
 
 The resulting files are named:
 
@@ -213,6 +234,61 @@ DND syncer (wear) - 1.0.7.apk
 
 Gradle's configuration cache is disabled on purpose: with it the configuration
 phase is reused and the auto-increment never runs.
+
+## Why the payload is more than just state
+
+A snapshot carries the two flags plus a marker for which fields changed on the
+sender. The receiver applies **only the changed** fields.
+
+Without that the two devices resonated, as captured in the log on September 15.
+At 07:00 the Wellbeing schedule ends the night on the phone. A second later the
+watch publishes `night=true` with reason `zen_mode_config_etag` — nothing had
+changed there, the etag just moved, and the code used to publish a snapshot
+unconditionally. The watch had been holding `bedtime_mode=1` all night, and that
+stale value is what it sent. The phone took it as a command and went back into
+night mode. The two then bounced the state 19 times over 14 minutes.
+
+Hence two rules:
+
+- publish only when the state actually changed since the last publish (the last
+  published state lives in SharedPreferences and survives a process restart);
+- apply only the fields the peer marked as changed.
+
+When a service connects, the snapshot goes out with no markers: that is a state
+exchange, not a command.
+
+## Logs
+
+The app writes a verbose log to a file — logcat does not survive a reboot, and
+the bug being chased happens once a night.
+
+- phone: `Downloads/DND syncer/dnd-syncer-phone.log` (visible in the Files app)
+- watch: `/sdcard/Android/data/com.bazyak.dndsyncer/files/dnd-syncer-watch.log`
+
+The phone screen has a logging switch and a button to pick a different folder
+(system picker; the grant is persisted across reboots).
+
+Rotation follows the linux convention: at 4 MB the current file becomes
+`.log.1`, the old `.1` shifts to `.2` and so on up to `.3`, and the oldest is
+dropped.
+
+Command output is truncated before it reaches the log: `dumpsys notification` is
+about a megabyte per call, and without truncation it piled up over two hundred
+megabytes in a night.
+
+```
+adb -s <watch> pull /sdcard/Android/data/com.bazyak.dndsyncer/files/dnd-syncer-watch.log
+```
+
+What gets logged: every ContentObserver fire with the name of the key that
+changed, all three flags on every event, snapshots sent and received with their
+reason, every shell command with its output, the result of each apply verified
+against actual state, and on the phone also the sequence of zen rule states from
+`dumpsys notification` plus the `Diff[...]` lines showing who flipped a rule and
+when.
+
+The phone screen has a "Записать срез в лог" button that dumps the full rule
+picture at the current moment.
 
 ## Notes
 

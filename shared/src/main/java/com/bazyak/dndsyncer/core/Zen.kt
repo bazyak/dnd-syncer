@@ -62,9 +62,18 @@ object Zen {
         )
     }
 
-    fun observe(context: Context, onChange: () -> Unit): ContentObserver {
+    /** Сырьё для лога: все ключи разом. */
+    fun describe(cr: ContentResolver): String =
+        "zen_mode=${zen(cr)} theater_mode_on=${if (theater(cr)) 1 else 0} " +
+            "bedtime_mode=${if (bedtime(cr)) 1 else 0} " +
+            "etag=${Settings.Global.getString(cr, KEY_ETAG)}"
+
+    /** Колбэк получает имя изменившегося ключа — без этого в логе не понять причину. */
+    fun observe(context: Context, onChange: (String) -> Unit): ContentObserver {
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) = onChange()
+            override fun onChange(selfChange: Boolean, uri: android.net.Uri?) {
+                onChange(uri?.lastPathSegment ?: "?")
+            }
         }
         uris().forEach {
             context.contentResolver.registerContentObserver(it, false, observer)

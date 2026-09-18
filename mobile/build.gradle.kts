@@ -4,8 +4,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-val appVersionName = rootProject.extra["appVersionName"] as String
-val appVersionCode = rootProject.extra["appVersionCode"] as Int
+val appVersionName = rootProject.extra["mobileVersionName"] as String
+val appVersionCode = rootProject.extra["mobileVersionCode"] as Int
 
 android {
     namespace = "com.bazyak.dndsyncer.phone"
@@ -39,6 +39,7 @@ android {
 
 dependencies {
     implementation(project(":shared"))
+    implementation(libs.androidx.documentfile)
     implementation(libs.androidx.lifecycle.runtime)
     implementation(libs.androidx.lifecycle.compose)
     implementation(libs.androidx.activity.compose)

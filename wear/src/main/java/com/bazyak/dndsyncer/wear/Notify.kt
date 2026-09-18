@@ -19,11 +19,12 @@ object Notify {
         val notification = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_warning)
             .setContentTitle("Режим не синхронизирован")
-            .setContentText("Нет Wi-Fi. Подойди ближе к сети и переключи режим ещё раз.")
+            .setContentText("Нет Wi-Fi. Подключись к сети — дальше всё восстановится само.")
             .setStyle(
                 NotificationCompat.BigTextStyle().bigText(
                     "Нет Wi-Fi, поэтому не удалось поднять Shizuku. " +
-                        "Подойди ближе к сети и переключи режим ещё раз.",
+                        "Подключись к сети: приложение ждёт её появления и " +
+                        "доделает остальное само.",
                 ),
             )
             .setPriority(NotificationCompat.PRIORITY_HIGH)

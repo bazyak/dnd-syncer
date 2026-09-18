@@ -1,6 +1,5 @@
 package com.bazyak.dndsyncer.core
 
-import android.util.Log
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
@@ -35,9 +34,9 @@ object RootShell {
             .start()
         val output = BufferedReader(InputStreamReader(process.inputStream)).use { it.readText() }
         process.waitFor()
-        Log.d(TAG, "$command → ${output.trim()}")
+        FileLog.d(TAG, "su${if (uid == null) "" else " $uid"}: $command → ${FileLog.brief(output)}")
         output
-    }.onFailure { Log.w(TAG, "su недоступен: $it") }.getOrNull()
+    }.onFailure { FileLog.w(TAG, "su недоступен: $it") }.getOrNull()
 
     private const val TAG = "RootShell"
 }
