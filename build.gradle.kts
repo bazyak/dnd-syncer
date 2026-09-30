@@ -21,6 +21,8 @@ plugins {
  *
  * Считается один раз здесь и раздаётся модулям через extra.
  */
+// Без private: объявления верхнего уровня в build-скрипте публичные
+// и не могут светить приватный тип.
 data class Version(var patch: Int, var code: Int)
 
 val versionFile = rootProject.file("version.properties")

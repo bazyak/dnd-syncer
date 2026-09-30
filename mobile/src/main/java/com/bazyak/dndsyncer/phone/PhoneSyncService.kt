@@ -34,6 +34,11 @@ class PhoneSyncService : AccessibilityService() {
         FileLog.d(TAG, "СЕРВИС ПОДКЛЮЧЁН. ${Zen.describe(contentResolver)}")
         FileLog.d(TAG, "shell=${Shell.backend()}")
         observer = Zen.observe(this) { key -> schedule("phone:$key") }
+
+        // Осколок implicit-правила от ранних сборок живёт в списке режимов
+        // телефона и только путает. Убираем при первом же старте.
+        scope.launch { PhoneDnd.removeLeftoverRule(this@PhoneSyncService) }
+
         schedule("connected")
     }
 
@@ -50,7 +55,7 @@ class PhoneSyncService : AccessibilityService() {
             delay(SETTLE_MS)
             // verbose: в момент публикации нужен полный расклад правил,
             // иначе потом не понять, кто поменял состояние.
-            val dump = ZenDump.read(verbose = true)
+            val dump = ZenDump.read(this@PhoneSyncService, verbose = true)
             val state = if (dump != null) {
                 ModeState(dnd = dump.dnd, night = dump.night)
             } else {
@@ -77,7 +82,7 @@ class PhoneSyncService : AccessibilityService() {
         private const val SETTLE_MS = 700L
 
         fun snapshot(context: Context): ModeState {
-            ZenDump.read()?.let { return ModeState(dnd = it.dnd, night = it.night) }
+            ZenDump.read(context)?.let { return ModeState(dnd = it.dnd, night = it.night) }
             return ModeState(dnd = Zen.zen(context.contentResolver) != 0, night = false)
         }
     }

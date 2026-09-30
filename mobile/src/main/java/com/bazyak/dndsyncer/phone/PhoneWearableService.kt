@@ -1,6 +1,5 @@
 package com.bazyak.dndsyncer.phone
 
-import com.bazyak.dndsyncer.core.Dnd
 import com.bazyak.dndsyncer.core.FileLog
 import com.bazyak.dndsyncer.core.Sync
 import com.bazyak.dndsyncer.core.SyncReceiver
@@ -45,7 +44,7 @@ class PhoneWearableService : WearableListenerService() {
         }
         if (applyDnd) {
             FileLog.d(TAG, "МЕНЯЮ dnd: ${current.dnd} → ${incoming.dnd}")
-            Dnd.set(this, incoming.dnd)
+            PhoneDnd.set(this, incoming.dnd)
         }
 
         val after = PhoneSyncService.snapshot(this)

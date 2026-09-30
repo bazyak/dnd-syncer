@@ -27,7 +27,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -40,6 +42,8 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import com.bazyak.dndsyncer.core.Access
 import com.bazyak.dndsyncer.core.FileLog
 import com.bazyak.dndsyncer.core.LogSettings
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.bazyak.dndsyncer.core.Shell
 
 class MainActivity : ComponentActivity() {
@@ -70,7 +74,7 @@ private fun WelcomeScreen() {
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         a11y = Access.isAccessibilityEnabled(context, PhoneSyncService::class.java)
-        rules = PhoneNight.dump()
+        rules = PhoneNight.dump(context)
         root = Shell.isAvailable()
     }
 
@@ -116,12 +120,15 @@ private fun WelcomeScreen() {
                 },
             )
 
+            SyncModesCard()
+
+            LogCard()
+
+            // Диагностика в самом низу: нужна редко, а места занимает много.
             if (rules.isNotEmpty()) {
                 Text("Состояние режимов", style = MaterialTheme.typography.titleSmall)
                 Text(rules, style = MaterialTheme.typography.bodySmall)
             }
-
-            LogCard()
         }
     }
 }
@@ -221,11 +228,72 @@ private fun LogCard() {
 
             Button(
                 onClick = {
-                    Thread { PhoneNight.logSnapshot() }.start()
+                    Thread { PhoneNight.logSnapshot(context) }.start()
                     Toast.makeText(context, "Срез записан", Toast.LENGTH_SHORT).show()
                 },
                 enabled = enabled,
             ) { Text("Записать срез в лог") }
+        }
+    }
+}
+
+/** Порядок групп в списке: системное, Wellbeing, всё остальное. */
+private fun groupOf(rule: ZenDump.Rule): Int = when {
+    rule.isManual -> 0
+    rule.pkg == "com.google.android.apps.wellbeing" -> 1
+    else -> 2
+}
+
+/**
+ * Выбор синхронизируемых режимов. На часах фильтров нет — там DND глушит
+ * всё подряд, поэтому режимы вроде "Вождения", пропускающие часть звонков,
+ * по умолчанию не уезжают.
+ */
+@Composable
+private fun SyncModesCard() {
+    val context = LocalContext.current
+    var rules by remember { mutableStateOf(emptyList<ZenDump.Rule>()) }
+    var version by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(version) {
+        rules = withContext(Dispatchers.IO) {
+            ZenDump.read(context)?.allRules.orEmpty()
+                .filter { it.isManual || it.silences }
+                // Сначала системное и Wellbeing (глушат телефон целиком),
+                // затем режимы сервисов Google (пропускают часть звонков).
+                .sortedWith(compareBy({ groupOf(it) }, { it.name }))
+        }
+    }
+
+    if (rules.isEmpty()) return
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text("Синхронизировать", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Невыбранные режимы глушат только телефон.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+
+            rules.forEach { rule ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(rule.name, style = MaterialTheme.typography.bodyMedium)
+                    Switch(
+                        checked = SyncFilter.isEnabled(context, rule),
+                        onCheckedChange = {
+                            SyncFilter.setEnabled(context, rule.id, it)
+                            version++
+                        },
+                    )
+                }
+            }
         }
     }
 }

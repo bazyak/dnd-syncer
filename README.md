@@ -1,141 +1,183 @@
 # DND syncer
 
-**English** · [Русский](README.ru.md)
+**Русский** · [English](README.en.md)
 
-Keeps Do Not Disturb, theater mode and bedtime mode in sync between a Pixel 10
-Pro (Android 17, rooted) and a OnePlus Watch 4 (Wear OS 6 / Android 16). No
-settings screen — just a welcome screen showing the status of each access.
+Синхронизация режимов между Pixel 10 Pro (Android 17, root) и OnePlus Watch 4
+(Wear OS 6 / Android 16). Настроек нет — только приветственный экран со
+статусом доступов.
 
-## What syncs
+## Что синхронизируется
 
-| Event | Result |
+| Событие | Результат |
 |---|---|
-| DND on the phone (manually, via tile, on schedule) | same on the watch |
-| DND on the watch | same on the phone |
-| Theater mode on the watch | DND on the phone |
-| DND turned off on the phone | everything clears on the watch, theater included |
-| Bedtime mode on the watch | bedtime mode (Digital Wellbeing) on the phone |
-| Bedtime mode on the phone | bedtime mode on the watch |
+| «Не беспокоить» на телефоне (вручную, плиткой, по расписанию) | то же на часах |
+| «Не беспокоить» на часах | то же на телефоне |
+| Театральный режим на часах | «Не беспокоить» на телефоне |
+| Выключение DND на телефоне | на часах гаснет всё, включая театр |
+| Ночной режим на часах | ночной режим (Digital Wellbeing) на телефоне |
+| Ночной режим на телефоне | ночной режим на часах |
 
-Theater mode is only ever enabled by hand on the watch: it cannot be turned on
-programmatically, and the phone has no equivalent.
+Театр включается только вручную на часах: программно поднять его нельзя, да и
+на телефоне аналога нет.
 
-## State model
+## Модель состояния
 
-Devices exchange a **snapshot** of two independent flags rather than a delta:
+Между устройствами ходит **снимок** из двух независимых признаков, а не дельта:
 
 ```
 ModeState(dnd: Boolean, night: Boolean)
 ```
 
-The receiver compares the snapshot against its own current state and does
-nothing when they match, so the loop terminates on its own — no separate echo
-suppression is needed.
+Приёмник сравнивает снимок со своим текущим и молчит при совпадении — за счёт
+этого цикл обрывается сам, отдельная защита от эха не нужна.
 
-### On the watch
+### На часах
 
-`zen_mode` is an OR of every silence source and never says which one is active,
-so the snapshot is derived from three `Settings.Global` keys:
+`zen_mode` — это OR всех источников тишины, сам по себе он источник не
+называет. Поэтому снимок собирается из трёх ключей `Settings.Global`:
 
 ```
 dnd   = theater_mode_on==1 || (zen_mode!=0 && bedtime_mode==0)
 night = bedtime_mode==1
 ```
 
-| bedtime, zen, theater | meaning | dnd | night |
+| bedtime, zen, theater | что это | dnd | night |
 |---|---|---|---|
-| 0,0,0 | nothing | false | false |
-| 0,1,0 | manual DND | true | false |
-| 0,1,1 | theater (± manual DND) | true | false |
-| 1,1,0 | bedtime only | false | true |
-| 1,1,1 | bedtime + theater | true | true |
+| 0,0,0 | ничего | false | false |
+| 0,1,0 | ручной DND | true | false |
+| 0,1,1 | театр (± ручной DND) | true | false |
+| 1,1,0 | только ночь | false | true |
+| 1,1,1 | ночь + театр | true | true |
 
-Rows 3 and 4 are deliberately indistinguishable — the resulting behaviour is
-identical. The `bedtime==0` term works because **on the watch** bedtime and
-manual DND are mutually exclusive: enabling one clears the other.
+Строки 3 и 4 неразличимы намеренно: поведение в них одинаковое. `bedtime==0` во
+второй скобке работает потому, что **на часах** ночь и ручной DND
+взаимоисключающие — включение одного гасит другое.
 
-### On the phone
+### На телефоне
 
-There bedtime and DND coexist while sharing the same `zen_mode`, so state is
-parsed out of `dumpsys notification`:
+Там ночь и DND **сосуществуют**, а `zen_mode` у них общий, поэтому состояние
+читается из `dumpsys notification`:
 
-- bedtime — an `AutomaticZenRule` with `type=3` (`TYPE_BEDTIME`) in `STATE_TRUE`;
-- DND — `MANUAL_RULE` in `STATE_TRUE`.
+- ночь — `AutomaticZenRule` с `type=3` (`TYPE_BEDTIME`) в состоянии `STATE_TRUE`;
+- DND — `MANUAL_RULE` в состоянии `STATE_TRUE`.
 
-The trigger is a `ContentObserver` on `zen_mode`, `theater_mode_on`,
-`bedtime_mode` and `zen_mode_config_etag`. That last key is essential: when DND
-is already on and bedtime is enabled on top, `zen_mode` does not change, but the
-etag changes on any zen config edit.
+Триггером служит `ContentObserver` на `zen_mode`, `theater_mode_on`,
+`bedtime_mode` и `zen_mode_config_etag`. Последний обязателен: если DND уже
+включён и сверху включается ночь, `zen_mode` не меняется, а etag меняется при
+любой правке zen-конфига.
 
-Publishing is debounced by 700 ms — a mode change touches several keys in
-sequence, and without the delay an intermediate state gets sent.
+Публикация задержана на 700 мс — смена режима трогает несколько ключей подряд,
+и без задержки уезжает промежуточное состояние.
 
-## Why everything goes through the shell
+## Почему всё делается через shell
 
-`NotificationManager.setInterruptionFilter()` is not usable:
+`NotificationManager.setInterruptionFilter()` не подходит:
 
-- it creates a zen rule with `enabler` set to our package name, and an app may
-  only clear its own rules. Manual DND (`enabler=android`) is off limits — which
-  is exactly why turning DND off from the phone did nothing;
-- on the OnePlus Watch 4 it has no effect at all. Verified:
+- он создаёт zen-правило с `enabler` = имя нашего пакета, а приложение может
+  гасить только собственные правила. Ручной DND (`enabler=android`) для него
+  неприкосновенен — именно поэтому выключение с телефона не работало;
+- на OnePlus Watch 4 он вообще не даёт эффекта. Проверено:
 
 ```
 adb shell cmd notification set_dnd priority
 adb shell dumpsys notification | grep mZenMode
-→ mZenMode=ZEN_MODE_IMPORTANT_INTERRUPTIONS   (shell command)
+→ mZenMode=ZEN_MODE_IMPORTANT_INTERRUPTIONS   (shell-команда)
 → mZenMode=ZEN_MODE_OFF                        (setInterruptionFilter)
 ```
 
-Writing `zen_mode` directly with `WRITE_SECURE_SETTINGS` is out too: the value
-is stored but the system ignores it.
+Прямая запись `zen_mode` через `WRITE_SECURE_SETTINGS` тоже отпадает: значение
+ложится, но система его игнорирует.
 
-The only thing that works is `cmd notification set_dnd priority|off`, and that
-is restricted to uid shell (2000) or root. Root covers the phone, Shizuku the
-watch.
+Работает единственный способ — `cmd notification set_dnd priority|off`, а его
+пускает только uid shell (2000) или root. На телефоне это root, на часах
+Shizuku.
 
-## Bedtime mode on the phone
+## Выбор синхронизируемых режимов
 
-The rule belongs to Digital Wellbeing
-(`pkg=com.google.android.apps.wellbeing`, `conditionId=.../winddown`), and per
-the documentation only that app may own `TYPE_BEDTIME` rules — creating our own
-is not an option.
+На часах фильтров нет: DND там глушит всё подряд. А «Вождение» и
+«Общественный транспорт» на телефоне часть звонков и сообщений пропускают —
+синхронизировать их значит потерять эти исключения.
 
-Calling `setAutomaticZenRuleState()` from the app process succeeds without an
-error yet is silently ignored: the check looks at the calling uid. So the same
-call is made from a separate process running as the system:
+Поэтому на экране телефона есть список режимов с переключателями. Список
+строится из дампа, поэтому чужие идентификаторы нигде не зашиты. По умолчанию
+включены ручное «Не беспокоить» и правила Digital Wellbeing (ночной режим,
+«Тсс при перевороте»); режимы от сервисов Google выключены.
+
+Невыбранный режим не уезжает на часы и не гасится по команде оттуда.
+
+### Ручная активация автоправил
+
+С Android 15 включение автоправила вручную не меняет его `state`, а ставит
+поверх `conditionOverride=OVERRIDE_ACTIVATE`. «Вождение» висело как
+`STATE_FALSE` с оверрайдом, будучи при этом включённым, и приложение считало
+его выключенным. Теперь оверрайд перебивает `state` в обе стороны.
+
+## Что считается «Не беспокоить» на телефоне
+
+Не только ручное включение. Тишину поднимают и автоправила: «Тсс при
+перевороте» (переворот телефона экраном вниз), «Вождение», «Общественный
+транспорт», обычные расписания. В `dumpsys` это отдельные `AutomaticZenRule`,
+а не `MANUAL_RULE`, поэтому сначала приложение их не видело и на часы ничего
+не отправляло.
+
+Теперь `dnd = MANUAL_RULE активно ИЛИ активно любое правило, кроме ночного`.
+Правила с `zenMode=ZEN_MODE_OFF` (например «Игровая панель») не в счёт — они
+активны, но ничего не глушат.
+
+Выключение с часов гасит каждое активное правило по отдельности через
+`ZenHelper`: `cmd notification set_dnd off` снимает только ручное.
+
+### Осколок implicit-правила
+
+Ранние сборки ставили DND через `setInterruptionFilter`, и система завела для
+приложения правило `implicit_com.bazyak.dndsyncer`. В списке режимов телефона
+оно видно как «Не беспокоить (DND syncer)» и ничего не делает: тишина давно
+ставится системной командой. Приложение находит такое правило при старте и
+удаляет его через `ZenHelper` (`removeAutomaticZenRule` от имени системы).
+
+## Ночной режим на телефоне
+
+Правило принадлежит Digital Wellbeing
+(`pkg=com.google.android.apps.wellbeing`, `conditionId=.../winddown`), а
+владеть правилами `TYPE_BEDTIME` по документации может только оно — своё
+завести нельзя.
+
+`setAutomaticZenRuleState()` из процесса приложения проходит без ошибки, но
+система его молча игнорирует: проверка смотрит на uid вызывающего. Поэтому тот
+же вызов запускается отдельным процессом от имени системы:
 
 ```
-su 1000 -c "CLASSPATH=<apk> app_process / com.bazyak.dndsyncer.phone.NightHelper <id> <uri> on"
+su 1000 -c "CLASSPATH=<apk> app_process / com.bazyak.dndsyncer.phone.ZenHelper <id> <uri> on"
 ```
 
-No separate dex is required — the app's own APK is already on the device and
-works as the CLASSPATH. `NightHelper` reflects its way to
-`INotificationManager` via `ServiceManager` and calls
-`setAutomaticZenRuleState` with `Condition.SOURCE_USER_ACTION`.
+Отдельный dex не нужен — APK приложения уже лежит на устройстве и годится как
+CLASSPATH. `ZenHelper` через рефлексию берёт `INotificationManager` из
+`ServiceManager` и зовёт `setAutomaticZenRuleState` с
+`Condition.SOURCE_USER_ACTION`.
 
-Tried and rejected: Wellbeing's own broadcasts (`TURN_OFF_WIND_DOWN`,
-`WIND_DOWN_ALARM_TRIGGERED`, `PAUSE`/`RESUME`) — they get delivered but have no
-effect.
+Пробовались и отброшены: широковещательные интенты Wellbeing
+(`TURN_OFF_WIND_DOWN`, `WIND_DOWN_ALARM_TRIGGERED`, `PAUSE`/`RESUME`) —
+доставляются, но эффекта не дают.
 
-## Access
+## Разрешения
 
-The only permission declared in a manifest is `WRITE_SECURE_SETTINGS` on the
-watch. Everything else is granted externally.
+В манифестах объявлено только `WRITE_SECURE_SETTINGS` на часах. Всё остальное —
+внешние доступы.
 
-**Accessibility service** (both devices) — granted with a button in the app. It
-handles no events and reads no screen content: the service exists purely to keep
-the process alive so the `ContentObserver` keeps running. It replaced
-`NotificationListenerService`, which required notification-reading access.
+**Специальные возможности** (оба устройства) — выдаётся кнопкой в приложении.
+События не обрабатываются, содержимое экрана не читается: сервис нужен как
+живой процесс, чтобы `ContentObserver` работал постоянно. Это заменило
+`NotificationListenerService`, который требовал доступа к чтению уведомлений.
 
-**Phone:** root. Magisk will prompt on first launch.
+**Телефон:** root. Диалог Magisk появится при первом запуске.
 
-**Watch:** Shizuku plus `WRITE_SECURE_SETTINGS`.
+**Часы:** Shizuku и `WRITE_SECURE_SETTINGS`.
 
 ```
 adb shell pm grant com.bazyak.dndsyncer android.permission.WRITE_SECURE_SETTINGS
 ```
 
-## Installing
+## Установка
 
 ```
 ./gradlew :mobile:assembleDebug :wear:assembleDebug
@@ -143,160 +185,158 @@ adb -s <phone> install -r mobile/build/outputs/apk/debug/mobile-debug.apk
 adb -s <watch> install -r wear/build/outputs/apk/debug/wear-debug.apk
 ```
 
-Both APKs share one `applicationId` and must be signed with the same key,
-otherwise the Data Layer will not treat them as one app. Their versions may differ.
+Оба APK — один `applicationId` и один ключ подписи, иначе Data Layer не свяжет
+их в одно приложение. Версии при этом могут отличаться.
 
-### Shizuku on the watch
+### Shizuku на часах
 
 ```
 adb install shizuku.apk
 adb shell sh /storage/emulated/0/Android/data/moe.shizuku.privileged.api/start.sh
 ```
 
-Grant the app access with the button on the watch screen; if the dialog does not
-fit the round display:
+Разрешение приложению выдаётся кнопкой на экране часов; если диалог не влезает
+в круглый экран:
 
 ```
 adb shell pm grant com.bazyak.dndsyncer moe.shizuku.manager.permission.API_V23
 ```
 
-To have Shizuku start itself after a reboot, grant it `WRITE_SECURE_SETTINGS`
-and enable "Start on boot" — it brings up wireless debugging on its own:
+Чтобы Shizuku поднимался сам после перезагрузки, выдай ему
+`WRITE_SECURE_SETTINGS` и включи «Start on boot» — он сам поднимет беспроводную
+отладку на старте:
 
 ```
 adb shell pm grant moe.shizuku.privileged.api android.permission.WRITE_SECURE_SETTINGS
 ```
 
-## Auto-starting Shizuku on the watch
+## Автозапуск Shizuku на часах
 
-Wear OS keeps Wi-Fi off while the watch is paired to the phone over Bluetooth,
-and Shizuku tries to enable wireless debugging exactly once at boot — there is
-no network at that moment and it never retries. So the app walks the chain
-itself:
+Wear OS не поднимает Wi-Fi, пока часы связаны с телефоном по Bluetooth, а
+Shizuku при загрузке пробует включить беспроводную отладку ровно один раз —
+сети в этот момент нет, и повторять он не умеет. Поэтому цепочку приложение
+проходит само:
 
-1. wait for Wi-Fi via `registerNetworkCallback`;
+1. ждём Wi-Fi через `registerNetworkCallback`;
 2. `Settings.Global["adb_wifi_enabled"] = 1`;
-3. Shizuku's official auto-start intent:
-   `moe.shizuku.privileged.api.START` with the `auth` extra.
+3. официальный intent автозапуска Shizuku:
+   `moe.shizuku.privileged.api.START` с extra `auth`.
 
-**We cannot turn the network on.** Verified on the OnePlus Watch 4: writing
-`adb_wifi_enabled` really does toggle wireless debugging, while `wifi_on` is a
-mirror — the value is stored but Wi-Fi stays off. `WifiManager.setWifiEnabled()`
-has been closed to ordinary apps since Android 10 and there is no way around it.
-So after a reboot Wi-Fi has to be switched on by hand, once, from the watch's
-Wi-Fi menu.
+**Сеть мы включить не можем.** Проверено на OnePlus Watch 4: запись
+`adb_wifi_enabled` реально включает и выключает отладку, а `wifi_on` —
+зеркало, значение ложится, но Wi-Fi не поднимается. `WifiManager.setWifiEnabled()`
+с Android 10 закрыт для обычных приложений, обхода нет. Поэтому Wi-Fi после
+перезагрузки придётся включить руками — один раз, зайдя в меню Wi-Fi на часах.
 
-Everything after that is automatic: the network callback stays registered, so it
-covers not just boot but any Wi-Fi drop — come home, the network returns, Shizuku
-comes back on its own. Plus attempts at boot, on the first command from the
-phone, and once a day around 4 AM.
+Дальше всё автоматически: ожидание сети висит постоянно и чинит не только
+загрузку, но и любой уход Wi-Fi — вернулся домой, сеть поднялась, Shizuku
+восстановился сам. Плюс попытка при загрузке, по первой команде с телефона и
+раз в сутки около 4 утра.
 
-**The token is required.** Find it in Shizuku itself: "Use Shizuku in automation
-apps" → "View intents" → Extras → `auth`. Put it in `gradle.properties`:
+**Токен обязателен.** Смотреть в самом Shizuku: «Управляйте Shizuku с помощью
+приложений автоматизации» → «Просмотр намерений» → Extras → `auth`. Прописать
+в `gradle.properties`:
 
 ```
-shizukuAuth=<token>
+shizukuAuth=<токен>
 ```
 
-Pressing the refresh button next to the token in Shizuku invalidates the old
-one, so rebuild after doing that.
+Если нажать в Shizuku кнопку обновления рядом с токеном, старый перестанет
+работать и сборку надо повторить.
 
-## Versions and APK names
+## Версии и имена APK
 
-Versions live in `version.properties` at the root, are computed once in the root
-`build.gradle.kts` and handed to the modules. The phone and the watch keep
-separate counters: a change often touches only one of them.
+Версии лежат в `version.properties` в корне, считаются один раз в корневом
+`build.gradle.kts` и раздаются модулям. У телефона и часов счётчики свои:
+правки часто касаются только одной части.
 
-Build rules:
+Правила при сборке:
 
-| situation | result |
+| ситуация | что происходит |
 |---|---|
-| versions equal | the module being built is bumped |
-| building the lagging one | it is aligned to the leading one, no bump |
-| building the leading one | it is bumped further |
-| building both at once | both get `max + 1` |
+| версии равны | собираемая часть увеличивается |
+| собираем отстающую | подтягивается до старшей, без увеличения |
+| собираем опережающую | увеличивается дальше |
+| собираем обе сразу | обе получают `max + 1` |
 
-`versionCode` only ever grows during alignment — otherwise installing over a
-previous build would be rejected. Sync and clean leave the numbers alone.
+`versionCode` при выравнивании только растёт — иначе установка поверх прежней
+сборки будет отбита системой. На sync и clean номера не меняются.
 
-Matching versions across the pair are not required: the Data Layer links the
-APKs by `applicationId` and signing key. The rules above exist so drift collapses
-at the first shared build instead of accumulating forever.
+Одинаковая версия у пары APK не обязательна: Data Layer связывает их по
+`applicationId` и ключу подписи. Правила выше нужны, чтобы расхождение не
+копилось бесконечно, а схлопывалось при первой же общей сборке.
 
-The resulting files are named:
+Готовые файлы называются так:
 
 ```
 DND syncer - 1.0.7.apk
 DND syncer (wear) - 1.0.7.apk
 ```
 
-`major` and `minor` are edited by hand in the same file.
+`major` и `minor` правятся руками в том же файле.
 
-Gradle's configuration cache is disabled on purpose: with it the configuration
-phase is reused and the auto-increment never runs.
+Конфигурационный кэш Gradle отключён намеренно: при нём фаза конфигурации
+переиспользуется и автоинкремент перестаёт срабатывать.
 
-## Why the payload is more than just state
+## Почему передаётся не просто состояние
 
-A snapshot carries the two flags plus a marker for which fields changed on the
-sender. The receiver applies **only the changed** fields.
+Снимок несёт не только два флага, но и отметку, какие поля изменились у
+отправителя. Принимающая сторона применяет **только изменённые** поля.
 
-Without that the two devices resonated, as captured in the log on September 15.
-At 07:00 the Wellbeing schedule ends the night on the phone. A second later the
-watch publishes `night=true` with reason `zen_mode_config_etag` — nothing had
-changed there, the etag just moved, and the code used to publish a snapshot
-unconditionally. The watch had been holding `bedtime_mode=1` all night, and that
-stale value is what it sent. The phone took it as a command and went back into
-night mode. The two then bounced the state 19 times over 14 minutes.
+Без этого получался резонанс, пойманный в логе 15 сентября. В 07:00 расписание
+Wellbeing гасит ночь на телефоне. Через секунду часы публикуют `night=true` с
+причиной `zen_mode_config_etag` — у них ничего не менялось, просто дёрнулся
+etag, а код публиковал снимок всегда. Часы всю ночь держали `bedtime_mode=1`,
+эту застарелую единицу они и отправили. Телефон принял её за команду и вернулся
+в ночь. Дальше стороны перебрасывали состояние 19 раз за 14 минут.
 
-Hence two rules:
+Отсюда два правила:
 
-- publish only when the state actually changed since the last publish (the last
-  published state lives in SharedPreferences and survives a process restart);
-- apply only the fields the peer marked as changed.
+- публикуем, только если состояние реально изменилось с прошлой публикации
+  (последнее опубликованное хранится в SharedPreferences и переживает
+  перезапуск процесса);
+- применяем у себя только те поля, которые сосед отметил как изменённые.
 
-When a service connects, the snapshot goes out with no markers: that is a state
-exchange, not a command.
+При подключении сервиса снимок уходит без отметок: это обмен состоянием, а не
+команда.
 
-## Logs
+## Логи
 
-The app writes a verbose log to a file — logcat does not survive a reboot, and
-the bug being chased happens once a night.
+Приложение пишет подробный лог в файл — logcat не переживает перезагрузку, а
+ловить приходится редкий ночной баг.
 
-- phone: `Downloads/DND syncer/dnd-syncer-phone.log` (visible in the Files app)
-- watch: `/sdcard/Android/data/com.bazyak.dndsyncer/files/dnd-syncer-watch.log`
+- телефон: `Downloads/DND syncer/dnd-syncer-phone.log` (виден в проводнике)
+- часы: `/sdcard/Android/data/com.bazyak.dndsyncer/files/dnd-syncer-watch.log`
 
-The phone screen has a logging switch and a button to pick a different folder
-(system picker; the grant is persisted across reboots).
+На экране телефона есть выключатель логирования и кнопка выбора другой папки
+(системный диалог, доступ запоминается между перезагрузками).
 
-Rotation follows the linux convention: at 4 MB the current file becomes
-`.log.1`, the old `.1` shifts to `.2` and so on up to `.3`, and the oldest is
-dropped.
+Ротация как в linux: при 4 МБ текущий файл становится `.log.1`, прежний `.1`
+уезжает в `.2` и так до `.3`, самый старый удаляется.
 
-Command output is truncated before it reaches the log: `dumpsys notification` is
-about a megabyte per call, and without truncation it piled up over two hundred
-megabytes in a night.
+Вывод команд в лог кладётся обрезанным: `dumpsys notification` — это около
+мегабайта за вызов, и без обрезки за ночь набегало больше двухсот мегабайт.
 
 ```
 adb -s <watch> pull /sdcard/Android/data/com.bazyak.dndsyncer/files/dnd-syncer-watch.log
 ```
 
-What gets logged: every ContentObserver fire with the name of the key that
-changed, all three flags on every event, snapshots sent and received with their
-reason, every shell command with its output, the result of each apply verified
-against actual state, and on the phone also the sequence of zen rule states from
-`dumpsys notification` plus the `Diff[...]` lines showing who flipped a rule and
-when.
+Что попадает в лог: каждое срабатывание ContentObserver с именем изменившегося
+ключа, все три флага при каждом событии, отправленные и принятые снимки с
+причиной, все shell-команды с выводом, результат применения с проверкой по
+факту, а на телефоне ещё и последовательность состояний zen-правил из
+`dumpsys notification` плюс строки `Diff[...]`, показывающие, кто и когда
+переключил правило.
 
-The phone screen has a "Записать срез в лог" button that dumps the full rule
-picture at the current moment.
+На экране телефона есть кнопка «Записать срез в лог» — снимает полный расклад
+правил в текущий момент.
 
-## Notes
+## Нюансы
 
-- **Power Saver** on the Watch 4 switches to the BES2800 chip where Wear OS does
-  not run — syncing pauses and catches up on return to Smart mode.
-- **Theater cannot be cleared on its own from the phone**: on `dnd=false`,
-  `theater_mode_on` is cleared first, otherwise theater keeps `zen_mode` up.
-- **Scheduled bedtime** is cleared by Wellbeing itself, and that propagates to
-  the watch through the normal path.
-- No polling and no timers anywhere: only system callbacks and
-  `ContentObserver`.
+- **Power Saver** на Watch 4 переключает часы на BES2800, Wear OS не работает —
+  синхронизация встаёт и досогласуется при возврате в Smart mode.
+- **Театр не выключить с телефона поодиночке**: при `dnd=false` снимается
+  сначала `theater_mode_on`, иначе театр удержит `zen_mode`.
+- **Ночь по расписанию** Wellbeing гасит сам, и это уезжает на часы обычным
+  путём.
+- Никаких пуллингов и таймеров: только колбэки системы и `ContentObserver`.

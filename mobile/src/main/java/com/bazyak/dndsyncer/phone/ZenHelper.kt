@@ -4,10 +4,12 @@ import android.net.Uri
 import android.os.IBinder
 
 /**
- * Запускается НЕ как часть приложения, а отдельным процессом через app_process
- * из-под uid 1000 (система):
+ * Переключает ЛЮБОЕ zen-правило от имени системы.
  *
- *   su 1000 -c "CLASSPATH=<apk> app_process / com.bazyak.dndsyncer.phone.NightHelper <id> <uri> on"
+ * Запускается НЕ как часть приложения, а отдельным процессом через app_process
+ * из-под uid 1000:
+ *
+ *   su 1000 -c "CLASSPATH=<apk> app_process / com.bazyak.dndsyncer.phone.ZenHelper <id> <uri> on"
  *
  * Смысл в uid. ZenModeHelper разрешает активировать ЧУЖОЕ правило только когда
  * вызов пришёл от системы; из процесса приложения тот же самый вызов молча
@@ -18,19 +20,21 @@ import android.os.IBinder
  *
  * Всё через рефлексию: INotificationManager и ServiceManager скрыты из SDK.
  */
-object NightHelper {
+object ZenHelper {
 
     @JvmStatic
     fun main(args: Array<String>) {
         if (args.size < 3) {
-            System.err.println("usage: NightHelper <ruleId> <conditionUri> <on|off>")
+            System.err.println("usage: ZenHelper <ruleId> <conditionUri> <on|off|remove>")
             return
         }
         val ruleId = args[0]
         val conditionUri = args[1]
-        val on = args[2] == "on"
+        val action = args[2]
 
-        runCatching { setState(ruleId, conditionUri, on) }
+        runCatching {
+            if (action == "remove") remove(ruleId) else setState(ruleId, conditionUri, action == "on")
+        }
             .onSuccess { println("OK") }
             .onFailure {
                 System.err.println("FAIL: $it")
@@ -38,14 +42,42 @@ object NightHelper {
             }
     }
 
-    private fun setState(ruleId: String, conditionUri: String, on: Boolean) {
+    /**
+     * Удаление правила. Нужно для осколка implicit_<пакет>, который оставил
+     * setInterruptionFilter в ранних сборках: он висит в списке режимов
+     * телефона как "Не беспокоить (DND syncer)" и только путает.
+     *
+     * Сигнатура removeAutomaticZenRule менялась между версиями Android
+     * (добавлялись fromUser и пакет вызывающего), поэтому подбираем аргументы
+     * по типам, а не фиксируем их.
+     */
+    private fun remove(ruleId: String) {
+        val nm = notificationManager()
+        val method = nm.javaClass.methods.first { it.name == "removeAutomaticZenRule" }
+        // Тип указан явно: в when возвращаются String, Boolean и null,
+        // и без этого toTypedArray() выводит их пересечение вместо Any?.
+        val args: List<Any?> = method.parameterTypes.mapIndexed { index, type ->
+            when {
+                index == 0 -> ruleId
+                type == Boolean::class.javaPrimitiveType -> true
+                type == String::class.java -> "android"
+                else -> null
+            }
+        }
+        method.invoke(nm, *args.toTypedArray())
+    }
+
+    private fun notificationManager(): Any {
         val serviceManager = Class.forName("android.os.ServiceManager")
         val binder = serviceManager
             .getMethod("getService", String::class.java)
             .invoke(null, "notification") as IBinder
-
         val stub = Class.forName("android.app.INotificationManager\$Stub")
-        val nm = stub.getMethod("asInterface", IBinder::class.java).invoke(null, binder)
+        return stub.getMethod("asInterface", IBinder::class.java).invoke(null, binder)!!
+    }
+
+    private fun setState(ruleId: String, conditionUri: String, on: Boolean) {
+        val nm = notificationManager()
 
         val conditionClass = Class.forName("android.service.notification.Condition")
         val state = if (on) STATE_TRUE else STATE_FALSE
