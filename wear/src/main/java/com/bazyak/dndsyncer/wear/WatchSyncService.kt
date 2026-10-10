@@ -38,11 +38,14 @@ class WatchSyncService : AccessibilityService() {
         // ensureRunning ждёт отклика Shizuku секундами — только в фоне,
         // onServiceConnected вызывается на главном потоке.
         scope.launch {
-            if (!Shell.isAvailable()) {
-                FileLog.d(TAG, "shell недоступен при старте")
-                ShizukuStarter.ensureRunning(this@WatchSyncService)
-            } else {
-                ShizukuStarter.awaitWifi(this@WatchSyncService)
+            when {
+                !ShizukuToken.isPresent(this@WatchSyncService) ->
+                    FileLog.d(TAG, "токена нет — Shizuku не трогаю")
+                !Shell.isAvailable() -> {
+                    FileLog.d(TAG, "shell недоступен при старте")
+                    ShizukuStarter.ensureRunning(this@WatchSyncService)
+                }
+                else -> ShizukuStarter.awaitWifi(this@WatchSyncService)
             }
         }
 

@@ -30,7 +30,7 @@ import com.bazyak.dndsyncer.core.Zen
  */
 object ShizukuStarter {
 
-    enum class Result { ALREADY_RUNNING, STARTED, NO_WIFI, FAILED }
+    enum class Result { ALREADY_RUNNING, STARTED, NO_WIFI, NO_TOKEN, FAILED }
 
     private var callback: ConnectivityManager.NetworkCallback? = null
 
@@ -43,6 +43,13 @@ object ShizukuStarter {
         if (ShizukuShell.isReady()) {
             FileLog.d(TAG, "Shizuku уже работает")
             return Result.ALREADY_RUNNING
+        }
+        // Без токена intent автозапуска будет отвергнут, поэтому не включаем
+        // ни отладку, ни ожидание сети: лишние попытки жгут батарею впустую.
+        if (!ShizukuToken.isPresent(context)) {
+            FileLog.w(TAG, "токен не задан — Shizuku не поднимаю")
+            stopAwaiting(context)
+            return Result.NO_TOKEN
         }
         if (!Zen.canWriteSecure(context)) {
             FileLog.w(TAG, "нет WRITE_SECURE_SETTINGS — отладку включить нечем")
@@ -62,10 +69,7 @@ object ShizukuStarter {
         FileLog.d(TAG, "adb_wifi_enabled=1 успех=$ok")
         Thread.sleep(ADB_SETTLE_MS)
 
-        val token = BuildConfig.SHIZUKU_AUTH
-        if (token.isBlank()) {
-            FileLog.w(TAG, "токен auth не задан в gradle.properties — intent отвергнут будет")
-        }
+        val token = ShizukuToken.get(context)
         FileLog.d(TAG, "отправляю $ACTION_START")
         context.sendBroadcast(
             Intent(ACTION_START).setPackage(SHIZUKU_PKG).putExtra(EXTRA_AUTH, token),
@@ -73,6 +77,10 @@ object ShizukuStarter {
 
         return if (waitFor(SHIZUKU_TIMEOUT_MS) { ShizukuShell.isReady() }) {
             FileLog.d(TAG, "Shizuku поднялся")
+            // Пока Shizuku лежал, телефон мог менять режим сколько угодно раз,
+            // а DND часы применить не могли. Выставляем текущее состояние
+            // телефона целиком.
+            PhoneCatchUp.run(context)
             Result.STARTED
         } else {
             FileLog.w(TAG, "Shizuku не ответил за $SHIZUKU_TIMEOUT_MS мс")
@@ -86,6 +94,10 @@ object ShizukuStarter {
      * сеть поднялась, Shizuku восстановился сам.
      */
     fun awaitWifi(context: Context) {
+        if (!ShizukuToken.isPresent(context)) {
+            FileLog.d(TAG, "токена нет — ожидание Wi-Fi не ставлю")
+            return
+        }
         if (callback != null) {
             FileLog.d(TAG, "ожидание Wi-Fi уже поставлено")
             return
@@ -99,6 +111,10 @@ object ShizukuStarter {
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 FileLog.d(TAG, "Wi-Fi появился, продолжаю цепочку")
+                if (!ShizukuToken.isPresent(context)) {
+                    FileLog.d(TAG, "токена нет, ничего не делаю")
+                    return
+                }
                 if (ShizukuShell.isReady()) {
                     FileLog.d(TAG, "Shizuku уже работает, ничего не делаю")
                     return

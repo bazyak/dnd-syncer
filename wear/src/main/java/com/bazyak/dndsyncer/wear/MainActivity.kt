@@ -9,13 +9,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -34,6 +37,9 @@ import com.bazyak.dndsyncer.core.LogSettings
 import com.bazyak.dndsyncer.core.Shell
 import com.bazyak.dndsyncer.core.ShizukuShell
 import com.bazyak.dndsyncer.core.Zen
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
@@ -72,12 +78,35 @@ private fun WelcomeScreen() {
     }
     var secure by remember { mutableStateOf(Zen.canWriteSecure(context)) }
     var shell by remember { mutableStateOf(Shell.isAvailable()) }
+    var hasToken by remember { mutableStateOf(ShizukuToken.isPresent(context)) }
     var shizukuAsks by remember { mutableStateOf(ShizukuShell.needsPermission()) }
+
+    // Токен прилетает с телефона в другом компоненте процесса: без подписки
+    // экран показывал бы старое состояние, пока приложение не убьют.
+    DisposableEffect(Unit) {
+        val unsubscribe = ShizukuToken.observe(context) {
+            hasToken = ShizukuToken.isPresent(context)
+        }
+        onDispose { unsubscribe() }
+    }
+
+    val scope = rememberCoroutineScope()
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         a11y = Access.isAccessibilityEnabled(context, WatchSyncService::class.java)
+        // Права выдали через adb, пока экран был закрыт: включаемся сами,
+        // не дожидаясь перезапуска и нажатия кнопки.
+        if (!a11y) {
+            scope.launch {
+                val restored = withContext(Dispatchers.IO) { WatchAccess.restore(context) }
+                if (restored) {
+                    a11y = Access.isAccessibilityEnabled(context, WatchSyncService::class.java)
+                }
+            }
+        }
         secure = Zen.canWriteSecure(context)
         shell = Shell.isAvailable()
+        hasToken = ShizukuToken.isPresent(context)
         shizukuAsks = ShizukuShell.needsPermission()
     }
 
@@ -89,14 +118,8 @@ private fun WelcomeScreen() {
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            item { ListHeader { Text("DND syncer") } }
-            item {
-                Centered(
-                    "Синхронизирует режимы с телефоном. Театр и ночь уезжают " +
-                        "на телефон, оттуда возвращаются обратно.",
-                    MaterialTheme.typography.bodySmall,
-                )
-            }
+            item { ListHeader { Text(stringResource(R.string.app_name)) } }
+            item { Centered(stringResource(R.string.intro), MaterialTheme.typography.bodySmall) }
 
             item {
                 Column(
@@ -106,9 +129,9 @@ private fun WelcomeScreen() {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Text("Специальные возможности", style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(R.string.a11y_title), style = MaterialTheme.typography.titleSmall)
                     Centered(
-                        if (a11y) "Выдано" else "Держит приложение активным",
+                        stringResource(if (a11y) R.string.granted else R.string.a11y_missing),
                         MaterialTheme.typography.bodyExtraSmall,
                     )
                     if (!a11y) {
@@ -117,13 +140,13 @@ private fun WelcomeScreen() {
                                 if (!Access.open(context, Access.accessibilityIntents())) {
                                     Toast.makeText(
                                         context,
-                                        "Экран недоступен",
+                                        R.string.screen_unavailable,
                                         Toast.LENGTH_SHORT,
                                     ).show()
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
-                        ) { Text("Разрешить") }
+                        ) { Text(stringResource(R.string.grant)) }
                     }
                 }
             }
@@ -136,13 +159,15 @@ private fun WelcomeScreen() {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Text("Shizuku", style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(R.string.shizuku_title), style = MaterialTheme.typography.titleSmall)
                     Centered(
-                        when {
-                            shell -> "Выдано"
-                            shizukuAsks -> "Нужно разрешение"
-                            else -> "Сервис не запущен"
-                        },
+                        stringResource(
+                            when {
+                                shell -> R.string.granted
+                                shizukuAsks -> R.string.shizuku_needs_permission
+                                else -> R.string.shizuku_not_running
+                            },
+                        ),
                         MaterialTheme.typography.bodyExtraSmall,
                     )
                     if (shizukuAsks) {
@@ -151,23 +176,31 @@ private fun WelcomeScreen() {
                                 ShizukuShell.requestPermission(MainActivity.SHIZUKU_REQUEST)
                             },
                             modifier = Modifier.fillMaxWidth(),
-                        ) { Text("Разрешить") }
+                        ) { Text(stringResource(R.string.grant)) }
                     } else if (!shell) {
                         Button(
                             onClick = {
-                                Toast.makeText(context, "Поднимаю…", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, R.string.shizuku_starting, Toast.LENGTH_SHORT).show()
                                 Thread {
                                     val result = ShizukuStarter.ensureRunning(context)
                                     FileLog.d("MainActivity", "Ручной запуск Shizuku: $result")
                                 }.start()
                             },
                             modifier = Modifier.fillMaxWidth(),
-                        ) { Text("Запустить") }
+                        ) { Text(stringResource(R.string.shizuku_start)) }
                     }
                 }
             }
 
-            item { AdbItem("Запись системных настроек", secure) }
+            item { AdbItem(stringResource(R.string.secure_title), secure) }
+
+            item {
+                AdbItem(
+                    title = stringResource(R.string.token_title),
+                    granted = hasToken,
+                    missing = stringResource(R.string.token_missing),
+                )
+            }
 
             item {
                 var logging by remember { mutableStateOf(LogSettings.isEnabled(context)) }
@@ -177,7 +210,7 @@ private fun WelcomeScreen() {
                         logging = it
                         LogSettings.setEnabled(context, it)
                     },
-                    label = { Text("Логирование") },
+                    label = { Text(stringResource(R.string.logging)) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp),
@@ -186,12 +219,9 @@ private fun WelcomeScreen() {
 
             item {
                 Centered(
-                    if (a11y && shell && secure) {
-                        "Всё готово"
-                    } else {
-                        "Недостающее выдаётся с компьютера через adb, " +
-                            "команды в README"
-                    },
+                    stringResource(
+                        if (a11y && shell && secure) R.string.all_set else R.string.missing_hint,
+                    ),
                     MaterialTheme.typography.labelMedium,
                 )
             }
@@ -200,7 +230,11 @@ private fun WelcomeScreen() {
 }
 
 @Composable
-private fun AdbItem(title: String, granted: Boolean) {
+private fun AdbItem(
+    title: String,
+    granted: Boolean,
+    missing: String = stringResource(R.string.adb_only),
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -210,7 +244,7 @@ private fun AdbItem(title: String, granted: Boolean) {
     ) {
         Text(title, style = MaterialTheme.typography.titleSmall)
         Centered(
-            if (granted) "Выдано" else "Только через adb",
+            if (granted) stringResource(R.string.present) else missing,
             MaterialTheme.typography.bodyExtraSmall,
         )
     }

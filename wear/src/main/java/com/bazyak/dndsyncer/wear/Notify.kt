@@ -14,17 +14,19 @@ object Notify {
     fun noWifi(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL, "Проблемы синхронизации", NotificationManager.IMPORTANCE_HIGH),
+            NotificationChannel(
+                CHANNEL,
+                context.getString(R.string.notify_channel),
+                NotificationManager.IMPORTANCE_HIGH,
+            ),
         )
         val notification = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_warning)
-            .setContentTitle("Режим не синхронизирован")
-            .setContentText("Нет Wi-Fi. Подключись к сети — дальше всё восстановится само.")
+            .setContentTitle(context.getString(R.string.notify_title))
+            .setContentText(context.getString(R.string.notify_text))
             .setStyle(
                 NotificationCompat.BigTextStyle().bigText(
-                    "Нет Wi-Fi, поэтому не удалось поднять Shizuku. " +
-                        "Подключись к сети: приложение ждёт её появления и " +
-                        "доделает остальное само.",
+                    context.getString(R.string.notify_big_text),
                 ),
             )
             .setPriority(NotificationCompat.PRIORITY_HIGH)

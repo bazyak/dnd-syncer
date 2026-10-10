@@ -1,7 +1,64 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">DND syncer</string>
-    <string name="accessibility_description">Нужен только чтобы приложение
-        оставалось активным и отслеживало смену режимов. Содержимое экрана
-        и уведомления не читаются.</string>
+    <string name="app_name" translatable="false">DND syncer</string>
+    <string name="accessibility_description">Only keeps the app running so it can
+        track mode changes. Screen content and notifications are not read.</string>
+
+    <string name="intro">Keeps Do Not Disturb and bedtime mode the same as on the watch.
+        Theater mode on the watch turns on Do Not Disturb here.</string>
+
+    <string name="granted">Granted</string>
+    <string name="not_granted">Not granted</string>
+    <string name="grant">Allow</string>
+    <string name="screen_unavailable">Screen unavailable</string>
+
+    <string name="a11y_title">Accessibility</string>
+    <string name="a11y_description">Keeps the app running. Screen content and
+        notifications are not read.</string>
+
+    <string name="root_title" translatable="false">Root</string>
+    <string name="root_description">Modes are set as the system: otherwise manually
+        enabled Do Not Disturb cannot be turned off and Digital Wellbeing bedtime
+        mode cannot be switched.</string>
+    <string name="root_unavailable">Root unavailable</string>
+
+    <string name="sync_title">Sync</string>
+    <string name="sync_hint">Unselected modes silence only the phone.</string>
+    <string name="mode_dnd">Do Not Disturb</string>
+
+    <string name="token_title">Shizuku token</string>
+    <string name="token_hint">The watch needs it to start Shizuku automatically.
+        Find it in Shizuku on the watch: automation section, intents screen,
+        Extras → auth.</string>
+    <string name="token_sent">Token sent to the watch</string>
+    <string name="token_removed">Token removed</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="replace">Replace</string>
+    <string name="delete">Delete</string>
+
+    <string name="log_title">Write log</string>
+    <string name="log_failure">Not writing: %1$s\nIf a file with this name was left
+        over from a previous install of the app, the system does not let it be
+        opened. Delete the old log files or pick another folder.</string>
+    <string name="log_folder">Folder</string>
+    <string name="log_default">Default</string>
+    <string name="log_snapshot">Write snapshot to log</string>
+    <string name="log_snapshot_done">Snapshot written</string>
+    <string name="log_err_no_storage">primary storage is not mounted</string>
+    <string name="log_err_mkdir">cannot create folder %1$s</string>
+    <string name="log_err_rename">cannot rename %1$s → %2$s</string>
+    <string name="log_err_open">provider did not open %1$s</string>
+    <string name="log_err_folder">folder unavailable</string>
+    <string name="log_err_create">cannot create %1$s</string>
+
+    <string name="state_title">Mode status</string>
+    <string name="state_no_access">no privileged access</string>
+    <string name="state_dnd">DND: %1$s</string>
+    <string name="state_night">Bedtime: %1$s</string>
+    <string name="state_rule">Bedtime rule: %1$s</string>
+    <string name="state_active">Active rules: %1$s</string>
+    <string name="state_on">on</string>
+    <string name="state_off">off</string>
+    <string name="state_not_found">not found</string>
 </resources>

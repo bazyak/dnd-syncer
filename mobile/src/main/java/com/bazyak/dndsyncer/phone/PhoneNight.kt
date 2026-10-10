@@ -44,16 +44,23 @@ object PhoneNight {
     /** Диагностика для экрана телефона. */
     fun dump(context: Context): String {
         val state = ZenDump.read(context)
-            ?: return "нет привилегированного доступа"
-        return buildString {
-            append("DND: ${if (state.dnd) "вкл" else "выкл"}\n")
-            append("Ночь: ${if (state.night) "вкл" else "выкл"}\n")
-            append("Правило ночи: ${state.bedtimeRuleId ?: "не найдено"}")
-            if (state.activeDndRules.isNotEmpty()) {
-                append("\nАктивные правила: ")
-                append(state.activeDndRules.joinToString { it.name })
+            ?: return context.getString(R.string.state_no_access)
+        fun onOff(on: Boolean) = context.getString(if (on) R.string.state_on else R.string.state_off)
+        val lines = mutableListOf(
+            context.getString(R.string.state_dnd, onOff(state.dnd)),
+            context.getString(R.string.state_night, onOff(state.night)),
+            context.getString(
+                R.string.state_rule,
+                state.bedtimeRuleId ?: context.getString(R.string.state_not_found),
+            ),
+        )
+        if (state.activeDndRules.isNotEmpty()) {
+            val names = state.activeDndRules.joinToString {
+                if (it.isManual) context.getString(R.string.mode_dnd) else it.name
             }
+            lines += context.getString(R.string.state_active, names)
         }
+        return lines.joinToString("\n")
     }
 
     private const val TAG = "PhoneNight"

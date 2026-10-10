@@ -1,89 +1,130 @@
 package com.bazyak.dndsyncer.phone
 
-import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
-import android.provider.MediaStore
+import android.os.storage.StorageManager
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import com.bazyak.dndsyncer.core.LogSettings
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import java.io.File
+import java.io.FileOutputStream
 
 /**
- * Файл лога с ротацией по образцу Linux: dnd-syncer-phone.log, затем .1, .2, .3.
+ * Файл лога с ротацией как в Linux: dnd-syncer-phone.log, .log.1, .log.2, .log.3.
  *
- * Два источника пути:
- *   по умолчанию — Downloads/DND syncer/ через MediaStore, разрешений не нужно;
- *   выбранная пользователем папка — через SAF, с постоянным доступом.
+ * Два места:
+ *   по умолчанию — Download/DND syncer/, обычными файлами. С Android 11
+ *     приложение без разрешений создаёт в Download/ свои файлы, и имя
+ *     остаётся ровно таким, как задано. MediaStore здесь не годится: при
+ *     MIME text/plain он дописывает к имени .txt, потом по исходному имени
+ *     свой же файл не находит и на каждом запуске плодит "(1).txt", "(2).txt"…
+ *   папка, выбранная пользователем, — через SAF с постоянным доступом.
+ *     MIME application/octet-stream, чтобы провайдер не менял имя.
+ *
+ * Чужой файл с тем же именем (в том числе оставшийся от прежней установки
+ * приложения) система открыть не даёт. Тогда запись не идёт, а причина
+ * лежит в [problem] — её показывает экран.
  */
 class LogStore(private val context: Context) {
 
-    private var written = 0L
-    private var cached: Uri? = null
+    private val _problem = MutableStateFlow<String?>(null)
+
+    /** Последняя ошибка записи; null, если пишется нормально. */
+    val problem: StateFlow<String?> = _problem.asStateFlow()
+
+    // SAF: поиск файла в дереве медленный, поэтому Uri и размер запоминаем.
+    private var tree: Uri? = null
+    private var treeFile: Uri? = null
+    private var treeWritten = 0L
 
     @Synchronized
     fun append(line: String) {
         val bytes = line.toByteArray()
-
-        // Размер считаем сами, а не спрашиваем систему на каждой строке:
-        // одна запись может быть и в сотню байт, и в килобайт.
-        if (written + bytes.size > MAX_BYTES) {
-            rotate()
-            written = 0
-            cached = null
-        }
-
-        val uri = cached ?: open().also { cached = it } ?: return
+        val folder = LogSettings.folder(context)
         runCatching {
-            context.contentResolver.openOutputStream(uri, "wa")?.use { it.write(bytes) }
-            written += bytes.size
+            if (folder != null) appendToTree(folder, bytes) else appendToDownloads(bytes)
+        }.onSuccess {
+            _problem.value = null
         }.onFailure {
-            Log.w(TAG, "не удалось дописать лог", it)
-            cached = null
+            treeFile = null
+            val text = it.message ?: it.javaClass.simpleName
+            // В logcat — только новую ошибку, а не каждую строку.
+            if (text != _problem.value) Log.w(TAG, "не удалось записать лог", it)
+            _problem.value = text
         }
     }
 
     /** Текущий путь для показа на экране. */
     fun describe(): String {
-        val folder = LogSettings.folder(context)
-        return if (folder != null) {
-            "${DocumentFile.fromTreeUri(context, folder)?.name ?: folder.lastPathSegment}/$NAME"
-        } else {
-            "$DEFAULT_DIR/$NAME"
-        }
+        val folder = LogSettings.folder(context) ?: return "$DEFAULT_DIR/$NAME"
+        val name = DocumentFile.fromTreeUri(context, folder)?.name ?: folder.lastPathSegment
+        return "$name/$NAME"
     }
 
-    // --- общее ---
+    // --- по умолчанию: Download/DND syncer ---
 
-    private fun open(): Uri? {
-        val uri = LogSettings.folder(context)?.let(::openInTree) ?: openInDownloads()
-        if (uri != null) written = size(uri)
-        return uri
+    private fun appendToDownloads(bytes: ByteArray) {
+        val root = context.getSystemService(StorageManager::class.java)
+            .primaryStorageVolume.directory
+            ?: error(context.getString(R.string.log_err_no_storage))
+        val dir = File(root, DEFAULT_DIR)
+        if (!dir.isDirectory && !dir.mkdirs()) error(context.getString(R.string.log_err_mkdir, dir.path))
+
+        val file = File(dir, NAME)
+        if (file.length() + bytes.size > MAX_BYTES) rotateFiles(dir)
+        FileOutputStream(file, true).use { it.write(bytes) }
     }
-
-    private fun size(uri: Uri): Long = runCatching {
-        context.contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize } ?: 0L
-    }.getOrDefault(0L)
 
     /**
-     * Сдвигаем: .2 → .3, .1 → .2, текущий → .1. Самый старый удаляется.
-     * Порядок с конца обязателен, иначе затрём ещё не сдвинутый файл.
+     * Сдвигаем с конца: .2 → .3, .1 → .2, текущий → .1. Самый старый удаляется.
+     * Обратный порядок обязателен, иначе затрём ещё не сдвинутый файл.
      */
-    private fun rotate() {
-        val folder = LogSettings.folder(context)
-        if (folder != null) rotateInTree(folder) else rotateInDownloads()
+    private fun rotateFiles(dir: File) {
+        File(dir, "$NAME.$KEEP").delete()
+        for (i in KEEP - 1 downTo 1) {
+            File(dir, "$NAME.$i").renameTo(File(dir, "$NAME.${i + 1}"))
+        }
+        check(File(dir, NAME).renameTo(File(dir, "$NAME.1"))) {
+            context.getString(R.string.log_err_rename, NAME, "$NAME.1")
+        }
     }
 
     // --- SAF: папка, выбранная пользователем ---
 
-    private fun openInTree(tree: Uri): Uri? {
-        val dir = DocumentFile.fromTreeUri(context, tree) ?: return null
-        val existing = dir.findFile(NAME)
-        return (existing ?: dir.createFile("text/plain", NAME))?.uri
+    private fun appendToTree(folder: Uri, bytes: ByteArray) {
+        if (folder != tree) {
+            // Папку сменили — старый Uri больше не наш.
+            tree = folder
+            treeFile = null
+        }
+        var uri = treeFile ?: openInTree(folder)
+        if (treeWritten + bytes.size > MAX_BYTES) {
+            rotateInTree(folder)
+            uri = openInTree(folder)
+        }
+        val stream = context.contentResolver.openOutputStream(uri, "wa")
+            ?: error(context.getString(R.string.log_err_open, NAME))
+        stream.use { it.write(bytes) }
+        treeWritten += bytes.size
     }
 
-    private fun rotateInTree(tree: Uri) {
-        val dir = DocumentFile.fromTreeUri(context, tree) ?: return
+    /** Находит или создаёт файл и запоминает его вместе с текущим размером. */
+    private fun openInTree(folder: Uri): Uri {
+        val dir = DocumentFile.fromTreeUri(context, folder) ?: error(context.getString(R.string.log_err_folder))
+        val file = dir.findFile(NAME)
+            ?: dir.createFile(MIME, NAME)
+            ?: error(context.getString(R.string.log_err_create, NAME))
+        treeFile = file.uri
+        treeWritten = file.length()
+        return file.uri
+    }
+
+    private fun rotateInTree(folder: Uri) {
+        val dir = DocumentFile.fromTreeUri(context, folder) ?: error(context.getString(R.string.log_err_folder))
         dir.findFile("$NAME.$KEEP")?.delete()
         for (i in KEEP - 1 downTo 1) {
             dir.findFile("$NAME.$i")?.renameTo("$NAME.${i + 1}")
@@ -91,62 +132,16 @@ class LogStore(private val context: Context) {
         dir.findFile(NAME)?.renameTo("$NAME.1")
     }
 
-    // --- MediaStore: Downloads/DND syncer ---
-
-    private fun openInDownloads(): Uri? {
-        find(NAME)?.let { return it }
-        val values = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, NAME)
-            put(MediaStore.Downloads.MIME_TYPE, "text/plain")
-            put(MediaStore.Downloads.RELATIVE_PATH, DEFAULT_DIR)
-        }
-        return context.contentResolver.insert(COLLECTION, values)
-    }
-
-    private fun rotateInDownloads() {
-        find("$NAME.$KEEP")?.let { context.contentResolver.delete(it, null, null) }
-        for (i in KEEP - 1 downTo 1) {
-            rename("$NAME.$i", "$NAME.${i + 1}")
-        }
-        rename(NAME, "$NAME.1")
-    }
-
-    private fun rename(from: String, to: String) {
-        val uri = find(from) ?: return
-        runCatching {
-            context.contentResolver.update(
-                uri,
-                ContentValues().apply { put(MediaStore.Downloads.DISPLAY_NAME, to) },
-                null,
-                null,
-            )
-        }.onFailure { Log.w(TAG, "не удалось переименовать $from → $to", it) }
-    }
-
-    private fun find(name: String): Uri? {
-        context.contentResolver.query(
-            COLLECTION,
-            arrayOf(MediaStore.Downloads._ID),
-            "${MediaStore.Downloads.DISPLAY_NAME} = ? AND " +
-                "${MediaStore.Downloads.RELATIVE_PATH} LIKE ?",
-            arrayOf(name, "$DEFAULT_DIR%"),
-            null,
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                return Uri.withAppendedPath(COLLECTION, cursor.getLong(0).toString())
-            }
-        }
-        return null
-    }
-
     companion object {
         const val NAME = "dnd-syncer-phone.log"
+
         // Не const: Environment.DIRECTORY_DOWNLOADS — статическое поле Java,
         // а не константа времени компиляции.
         val DEFAULT_DIR = "${Environment.DIRECTORY_DOWNLOADS}/DND syncer"
+
         private const val TAG = "LogStore"
+        private const val MIME = "application/octet-stream"
         private const val KEEP = 3
         private const val MAX_BYTES = 4L * 1024 * 1024
-        private val COLLECTION: Uri = MediaStore.Downloads.EXTERNAL_CONTENT_URI
     }
 }

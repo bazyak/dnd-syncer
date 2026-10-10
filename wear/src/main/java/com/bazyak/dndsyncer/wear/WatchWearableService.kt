@@ -1,12 +1,12 @@
 package com.bazyak.dndsyncer.wear
 
-import com.bazyak.dndsyncer.core.Dnd
 import com.bazyak.dndsyncer.core.FileLog
-import com.bazyak.dndsyncer.core.Shell
 import com.bazyak.dndsyncer.core.Sync
 import com.bazyak.dndsyncer.core.SyncReceiver
 import com.bazyak.dndsyncer.core.Zen
+import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
+import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.WearableListenerService
 
 /**
@@ -18,7 +18,12 @@ import com.google.android.gms.wearable.WearableListenerService
 class WatchWearableService : WearableListenerService() {
 
     override fun onDataChanged(dataEvents: DataEventBuffer) {
-        val update = SyncReceiver.parse(dataEvents, Sync.PATH_PHONE) ?: run {
+        // Буфер живёт только внутри колбэка, а пройти по нему надо дважды:
+        // отдельно за токеном и отдельно за состоянием.
+        val events = dataEvents.map { it.freeze() }
+        receiveToken(events)
+
+        val update = SyncReceiver.parse(events, Sync.PATH_PHONE) ?: run {
             FileLog.d(TAG, "событие не про нас, пропускаю")
             return
         }
@@ -41,57 +46,28 @@ class WatchWearableService : WearableListenerService() {
             return
         }
 
-        if (!Shell.isAvailable()) {
-            FileLog.w(TAG, "shell недоступен, пробую поднять Shizuku")
+        WatchModes.apply(this, incoming, applyDnd = applyDnd, applyNight = applyNight)
+    }
+
+    /**
+     * Токен приходит с телефона отдельным DataItem. Сохраняем и сразу пробуем
+     * поднять Shizuku: ждать следующего повода незачем. Нет Wi-Fi — встанет
+     * ожидание сети. Токен удалён — та же функция снимет ожидание.
+     */
+    private fun receiveToken(events: List<DataEvent>) {
+        events.forEach { event ->
+            if (event.type != DataEvent.TYPE_CHANGED) return@forEach
+            if (event.dataItem.uri.path != Sync.PATH_TOKEN) return@forEach
+
+            val token = DataMapItem.fromDataItem(event.dataItem)
+                .dataMap.getString(Sync.KEY_TOKEN).orEmpty()
+            ShizukuToken.set(this, token)
+            FileLog.d(TAG, if (token.isEmpty()) "токен удалён с телефона" else "токен получен")
+
             val result = ShizukuStarter.ensureRunning(this)
-            FileLog.d(TAG, "подъём Shizuku: $result")
-            when (result) {
-                ShizukuStarter.Result.NO_WIFI -> {
-                    Notify.noWifi(this)
-                    return
-                }
-                ShizukuStarter.Result.FAILED -> FileLog.w(TAG, "Shizuku поднять не удалось")
-                else -> Notify.clear(this)
-            }
+            FileLog.d(TAG, "подъём Shizuku после смены токена: $result")
+            if (result == ShizukuStarter.Result.STARTED) Notify.clear(this)
         }
-
-        if (applyNight) {
-            FileLog.d(TAG, "МЕНЯЮ ночь: ${current.night} → ${incoming.night}")
-            setNight(incoming.night)
-        }
-        if (applyDnd) {
-            FileLog.d(TAG, "МЕНЯЮ dnd: ${current.dnd} → ${incoming.dnd}")
-            setDnd(incoming.dnd)
-        }
-        FileLog.d(TAG, "после применения: ${Zen.describe(contentResolver)}")
-    }
-
-    private fun setNight(on: Boolean) {
-        if (!Zen.canWriteSecure(this)) {
-            FileLog.w(TAG, "нет WRITE_SECURE_SETTINGS — ночной режим не применён")
-            return
-        }
-        val ok = Zen.putGlobal(this, Zen.KEY_BEDTIME, if (on) 1 else 0)
-        FileLog.d(TAG, "запись bedtime_mode=${if (on) 1 else 0} успех=$ok")
-    }
-
-    private fun setDnd(on: Boolean) {
-        if (on) {
-            // Если тишина уже поднята театром или ночью, вызов будет no-op —
-            // и это нормально, DND по факту уже действует.
-            Dnd.set(this, true)
-            return
-        }
-        // Сначала снимаем театр, иначе он удержит zen_mode.
-        if (Zen.theater(contentResolver)) {
-            if (Zen.canWriteSecure(this)) {
-                val ok = Zen.putGlobal(this, Zen.KEY_THEATER, 0)
-                FileLog.d(TAG, "снимаю театр, успех=$ok")
-            } else {
-                FileLog.w(TAG, "нет WRITE_SECURE_SETTINGS — театр не снят")
-            }
-        }
-        Dnd.set(this, false)
     }
 
     private fun mark(changed: Boolean) = if (changed) " (ИЗМЕНЕНО)" else ""

@@ -18,22 +18,9 @@ android {
         versionCode = appVersionCode
         versionName = appVersionName
 
-        // Токен автозапуска Shizuku. Берётся в самом Shizuku:
-        // «Управляйте Shizuku с помощью приложений автоматизации» →
-        // «Просмотр намерений» → Extras → auth.
-        // Задаётся в gradle.properties или local.properties строкой
-        //   shizukuAuth=<токен>
-        buildConfigField(
-            "String",
-            "SHIZUKU_AUTH",
-            "\"${project.findProperty("shizukuAuth") ?: ""}\"",
-        )
     }
     buildTypes { release { isMinifyEnabled = false } }
-    buildFeatures {
-        compose = true
-        buildConfig = true
-    }
+    buildFeatures { compose = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

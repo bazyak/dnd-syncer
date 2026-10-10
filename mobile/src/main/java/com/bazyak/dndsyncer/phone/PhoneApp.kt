@@ -19,6 +19,11 @@ class PhoneApp : Application() {
         FileLog.install { line -> store?.append(line) }
         FileLog.d(TAG, "Запуск процесса, привилегированный доступ: ${Shell.backend()}")
         FileLog.d(TAG, "Лог: ${store?.describe()}")
+
+        // После принудительной остановки система снимает службу специальных
+        // возможностей. Возвращаем её через рут, в фоне: su может ждать
+        // подтверждения Magisk, а onCreate блокировать нельзя.
+        Thread { PhoneAccess.restore(this) }.start()
     }
 
     companion object {

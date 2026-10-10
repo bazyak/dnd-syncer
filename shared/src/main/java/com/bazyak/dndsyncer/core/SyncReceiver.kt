@@ -7,7 +7,10 @@ import com.google.android.gms.wearable.DataMapItem
 /** Разбор входящего снимка от соседа. */
 object SyncReceiver {
 
-    fun parse(events: DataEventBuffer, peerPath: String): ModeUpdate? {
+    fun parse(events: DataEventBuffer, peerPath: String): ModeUpdate? =
+        parse(events.map { it.freeze() }, peerPath)
+
+    fun parse(events: List<DataEvent>, peerPath: String): ModeUpdate? {
         for (event in events) {
             if (event.type != DataEvent.TYPE_CHANGED) continue
             if (event.dataItem.uri.path != peerPath) continue

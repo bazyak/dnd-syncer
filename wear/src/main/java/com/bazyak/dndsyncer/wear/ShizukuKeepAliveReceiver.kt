@@ -20,6 +20,11 @@ class ShizukuKeepAliveReceiver : BroadcastReceiver() {
         FileLog.d(TAG, "Сработал: ${intent.action}")
         schedule(context)
 
+        if (!ShizukuToken.isPresent(context)) {
+            FileLog.d(TAG, "токена нет — попытку пропускаю")
+            return
+        }
+
         val pending = goAsync()
         thread {
             try {

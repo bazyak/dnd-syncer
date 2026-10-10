@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_description">Нужен только чтобы приложение
+        оставалось активным и отслеживало смену режимов. Содержимое экрана
+        и уведомления не читаются.</string>
+
+    <string name="intro">Синхронизирует режимы с телефоном. Театр и ночь уезжают
+        на телефон, оттуда возвращаются обратно.</string>
+
+    <string name="granted">Выдано</string>
+    <string name="grant">Разрешить</string>
+    <string name="screen_unavailable">Экран недоступен</string>
+    <string name="present">Есть</string>
+    <string name="adb_only">Только через adb</string>
+
+    <string name="a11y_title">Специальные возможности</string>
+    <string name="a11y_missing">Держит приложение активным</string>
+
+    <string name="shizuku_needs_permission">Нужно разрешение</string>
+    <string name="shizuku_not_running">Сервис не запущен</string>
+    <string name="shizuku_start">Запустить</string>
+    <string name="shizuku_starting">Поднимаю…</string>
+
+    <string name="secure_title">Запись системных настроек</string>
+    <string name="token_title">Токен Shizuku</string>
+    <string name="token_missing">Введи на телефоне</string>
+    <string name="logging">Логирование</string>
+
+    <string name="all_set">Всё готово</string>
+    <string name="missing_hint">Недостающее выдаётся с компьютера через adb,
+        команды в README</string>
+
+    <string name="notify_channel">Проблемы синхронизации</string>
+    <string name="notify_title">Режим не синхронизирован</string>
+    <string name="notify_text">Не поднят Shizuku из-за отсутствия Wi-Fi. Подключись
+        к сети — дальше всё восстановится само.</string>
+    <string name="notify_big_text">Нет Wi-Fi, поэтому не удалось поднять Shizuku.
+        Подключись к сети: приложение ждёт её появления и доделает остальное
+        само.</string>
+</resources>

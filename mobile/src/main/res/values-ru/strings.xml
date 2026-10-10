@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_description">Нужен только чтобы приложение
+        оставалось активным и отслеживало смену режимов. Содержимое экрана
+        и уведомления не читаются.</string>
+
+    <string name="intro">Держит «Не беспокоить» и ночной режим одинаковыми с часами.
+        Театр на часах включает «Не беспокоить» здесь.</string>
+
+    <string name="granted">Выдано</string>
+    <string name="not_granted">Не выдано</string>
+    <string name="grant">Разрешить</string>
+    <string name="screen_unavailable">Экран недоступен</string>
+
+    <string name="a11y_title">Специальные возможности</string>
+    <string name="a11y_description">Держит приложение активным. Содержимое экрана
+        и уведомления не читаются.</string>
+
+    <string name="root_description">Режимы ставятся от имени системы: иначе не
+        выключить «Не беспокоить», включённый вручную, и не переключить ночной
+        режим Digital Wellbeing.</string>
+    <string name="root_unavailable">Root недоступен</string>
+
+    <string name="sync_title">Синхронизировать</string>
+    <string name="sync_hint">Невыбранные режимы глушат только телефон.</string>
+    <string name="mode_dnd">Не беспокоить</string>
+
+    <string name="token_title">Токен Shizuku</string>
+    <string name="token_hint">Нужен часам для автозапуска Shizuku. Смотреть в самом
+        Shizuku: «Управляйте Shizuku с помощью приложений автоматизации» →
+        «Просмотр намерений» → Extras → auth.</string>
+    <string name="token_sent">Токен отправлен на часы</string>
+    <string name="token_removed">Токен удалён</string>
+    <string name="save">Сохранить</string>
+    <string name="cancel">Отмена</string>
+    <string name="replace">Заменить</string>
+    <string name="delete">Удалить</string>
+
+    <string name="log_title">Писать лог</string>
+    <string name="log_failure">Запись не идёт: %1$s\nЕсли файл с таким именем остался
+        от прежней установки приложения, система не даёт его открыть. Удали старые
+        файлы лога или выбери другую папку.</string>
+    <string name="log_folder">Папка</string>
+    <string name="log_default">По умолчанию</string>
+    <string name="log_snapshot">Записать срез в лог</string>
+    <string name="log_snapshot_done">Срез записан</string>
+    <string name="log_err_no_storage">основное хранилище не смонтировано</string>
+    <string name="log_err_mkdir">не удалось создать папку %1$s</string>
+    <string name="log_err_rename">не удалось переименовать %1$s → %2$s</string>
+    <string name="log_err_open">провайдер не открыл %1$s</string>
+    <string name="log_err_folder">папка недоступна</string>
+    <string name="log_err_create">не удалось создать %1$s</string>
+
+    <string name="state_title">Состояние режимов</string>
+    <string name="state_no_access">нет привилегированного доступа</string>
+    <string name="state_dnd">DND: %1$s</string>
+    <string name="state_night">Ночь: %1$s</string>
+    <string name="state_rule">Правило ночи: %1$s</string>
+    <string name="state_active">Активные правила: %1$s</string>
+    <string name="state_on">вкл</string>
+    <string name="state_off">выкл</string>
+    <string name="state_not_found">не найдено</string>
+</resources>

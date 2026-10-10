@@ -13,6 +13,14 @@ object Sync {
     const val PATH_PHONE = "/dnd/phone"
     const val PATH_WATCH = "/dnd/watch"
 
+    /**
+     * Токен автозапуска Shizuku: вводится на телефоне и уезжает на часы.
+     * Путь намеренно внутри /dnd/, чтобы подошёл уже объявленный в манифесте
+     * фильтр. Пустая строка означает "токен удалён".
+     */
+    const val PATH_TOKEN = "/dnd/token"
+    const val KEY_TOKEN = "token"
+
     const val KEY_DND = "dnd"
     const val KEY_NIGHT = "night"
     const val KEY_DND_CHANGED = "dnd_changed"

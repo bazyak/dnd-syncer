@@ -23,6 +23,10 @@ class WatchApp : Application() {
         FileLog.install(::append)
         FileLog.d(TAG, "Запуск процесса, привилегированный доступ: ${Shell.backend()}")
         FileLog.d(TAG, "Лог: ${logFile.absolutePath}")
+
+        // После принудительной остановки система снимает службу специальных
+        // возможностей. Если есть WRITE_SECURE_SETTINGS — включаемся сами.
+        WatchAccess.restore(this)
     }
 
     private fun append(line: String) {

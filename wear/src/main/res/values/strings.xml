@@ -1,7 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">DND syncer</string>
-    <string name="accessibility_description">Нужен только чтобы приложение
-        оставалось активным и отслеживало смену режимов. Содержимое экрана
-        и уведомления не читаются.</string>
+    <string name="app_name" translatable="false">DND syncer</string>
+    <string name="accessibility_description">Only keeps the app running so it can
+        track mode changes. Screen content and notifications are not read.</string>
+
+    <string name="intro">Syncs modes with the phone. Theater and bedtime go to the
+        phone and come back from there.</string>
+
+    <string name="granted">Granted</string>
+    <string name="grant">Allow</string>
+    <string name="screen_unavailable">Screen unavailable</string>
+    <string name="present">Yes</string>
+    <string name="adb_only">adb only</string>
+
+    <string name="a11y_title">Accessibility</string>
+    <string name="a11y_missing">Keeps the app running</string>
+
+    <string name="shizuku_title" translatable="false">Shizuku</string>
+    <string name="shizuku_needs_permission">Permission needed</string>
+    <string name="shizuku_not_running">Service not running</string>
+    <string name="shizuku_start">Start</string>
+    <string name="shizuku_starting">Starting…</string>
+
+    <string name="secure_title">Write system settings</string>
+    <string name="token_title">Shizuku token</string>
+    <string name="token_missing">Enter it on the phone</string>
+    <string name="logging">Logging</string>
+
+    <string name="all_set">All set</string>
+    <string name="missing_hint">Anything missing is granted from a computer via adb,
+        commands are in the README</string>
+
+    <string name="notify_channel">Sync problems</string>
+    <string name="notify_title">Mode not synced</string>
+    <string name="notify_text">Shizuku is not running because there is no Wi-Fi.
+        Connect to a network — the rest will recover on its own.</string>
+    <string name="notify_big_text">No Wi-Fi, so Shizuku could not be started.
+        Connect to a network: the app is waiting for it and will finish the rest
+        on its own.</string>
 </resources>
