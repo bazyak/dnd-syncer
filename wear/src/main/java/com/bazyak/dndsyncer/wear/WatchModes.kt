@@ -2,9 +2,12 @@ package com.bazyak.dndsyncer.wear
 
 import android.content.Context
 import com.bazyak.dndsyncer.core.Dnd
+import com.bazyak.dndsyncer.core.DndSync
 import com.bazyak.dndsyncer.core.FileLog
 import com.bazyak.dndsyncer.core.ModeState
 import com.bazyak.dndsyncer.core.Shell
+import com.bazyak.dndsyncer.core.Sync
+import com.bazyak.dndsyncer.core.SyncLock
 import com.bazyak.dndsyncer.core.Zen
 
 /**
@@ -20,22 +23,32 @@ object WatchModes {
      * идёт первой и не зависит от Wi-Fi и токена. Shell поднимается только
      * для DND и только если без него не обойтись.
      *
-     * Synchronized: команда с телефона и догон после подъёма Shizuku могут
-     * прийти из разных потоков одновременно. Повторный вход из того же потока
-     * (подъём Shizuku внутри setDnd запускает догон) монитор пропускает.
+     * Под SyncLock: команда с телефона и догон после подъёма Shizuku могут
+     * прийти из разных потоков, а публикация не должна застать применение
+     * посередине. Повторный вход из того же потока (подъём Shizuku внутри
+     * setDnd запускает догон) блокировка пропускает.
      */
-    @Synchronized
     fun apply(context: Context, target: ModeState, applyDnd: Boolean, applyNight: Boolean) {
-        val current = Zen.snapshot(context.contentResolver)
-        if (applyNight) {
-            FileLog.d(TAG, "МЕНЯЮ ночь: ${current.night} → ${target.night}")
-            setNight(context, target.night)
+        SyncLock.withLock {
+            val current = Zen.snapshot(context.contentResolver)
+            if (applyNight) {
+                FileLog.d(TAG, "МЕНЯЮ ночь: ${current.night} → ${target.night}")
+                setNight(context, target.night)
+            }
+            if (applyDnd) {
+                FileLog.d(TAG, "МЕНЯЮ dnd: ${current.dnd} → ${target.dnd}")
+                setDnd(context, target.dnd)
+            }
+            FileLog.d(TAG, "после применения: ${Zen.describe(context.contentResolver)}")
+
+            // Применённое телефон уже знает — обратно эхом не отправляем.
+            val after = Zen.snapshot(context.contentResolver)
+            DndSync(context, Sync.PATH_WATCH).acknowledge(
+                after,
+                dnd = applyDnd && after.dnd == target.dnd,
+                night = applyNight && after.night == target.night,
+            )
         }
-        if (applyDnd) {
-            FileLog.d(TAG, "МЕНЯЮ dnd: ${current.dnd} → ${target.dnd}")
-            setDnd(context, target.dnd)
-        }
-        FileLog.d(TAG, "после применения: ${Zen.describe(context.contentResolver)}")
     }
 
     private fun setNight(context: Context, on: Boolean) {

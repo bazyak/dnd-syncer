@@ -1,7 +1,10 @@
 package com.bazyak.dndsyncer.phone
 
+import com.bazyak.dndsyncer.core.DndSync
 import com.bazyak.dndsyncer.core.FileLog
+import com.bazyak.dndsyncer.core.ModeUpdate
 import com.bazyak.dndsyncer.core.Sync
+import com.bazyak.dndsyncer.core.SyncLock
 import com.bazyak.dndsyncer.core.SyncReceiver
 import com.bazyak.dndsyncer.core.Zen
 import com.google.android.gms.wearable.DataEventBuffer
@@ -18,6 +21,12 @@ class PhoneWearableService : WearableListenerService() {
             FileLog.d(TAG, "событие не про нас, пропускаю")
             return
         }
+        // Применение и подтверждение — под SyncLock: публикация не должна
+        // застать их посередине.
+        SyncLock.withLock { applyUpdate(update) }
+    }
+
+    private fun applyUpdate(update: ModeUpdate) {
         val incoming = update.state
         val current = PhoneSyncService.snapshot(this)
         FileLog.d(
@@ -49,6 +58,13 @@ class PhoneWearableService : WearableListenerService() {
 
         val after = PhoneSyncService.snapshot(this)
         FileLog.d(TAG, "после применения: dnd=${after.dnd} night=${after.night}")
+
+        // Применённое часы уже знают — обратно эхом не отправляем.
+        DndSync(this, Sync.PATH_PHONE).acknowledge(
+            after,
+            dnd = applyDnd && after.dnd == incoming.dnd,
+            night = applyNight && after.night == incoming.night,
+        )
     }
 
     private fun mark(changed: Boolean) = if (changed) " (ИЗМЕНЕНО)" else ""

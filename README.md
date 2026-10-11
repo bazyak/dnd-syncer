@@ -27,9 +27,13 @@ Devices exchange a **snapshot** of two independent flags rather than a delta:
 ModeState(dnd: Boolean, night: Boolean)
 ```
 
-The receiver compares the snapshot with its own current state and stays silent
-when they match — that is what breaks the loop, so no separate echo protection
-is needed
+The receiver applies only what the peer marked as changed and stays silent when
+it already matches. Whatever it applied on the peer's command is not sent back:
+the peer already knows that value, and a late echo would look like a command to
+it and bring back a mode it had just turned off
+
+Applying a command and deciding to publish never overlap, otherwise a publish
+could catch an apply halfway and send an intermediate state
 
 ### On the watch
 

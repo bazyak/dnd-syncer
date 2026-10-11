@@ -68,13 +68,17 @@ class WatchSyncService : AccessibilityService() {
 
         pending = scope.launch {
             delay(SETTLE_MS)
-            val state = Zen.snapshot(contentResolver)
-            FileLog.d(
-                TAG,
-                "ПУБЛИКУЮ [$reason] ${Zen.describe(contentResolver)} → " +
-                    "dnd=${state.dnd} night=${state.night}",
-            )
-            sync.publish(state, reason)
+            // Состояние читается внутри publish, под SyncLock: так оно не
+            // застанет посередине применение команды соседа.
+            sync.publish(reason) {
+                val state = Zen.snapshot(contentResolver)
+                FileLog.d(
+                    TAG,
+                    "ПУБЛИКУЮ [$reason] ${Zen.describe(contentResolver)} → " +
+                        "dnd=${state.dnd} night=${state.night}",
+                )
+                state
+            }
         }
     }
 

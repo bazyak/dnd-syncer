@@ -12,8 +12,8 @@ import com.google.android.gms.wearable.WearableListenerService
 /**
  * Применяет на часах снимок с телефона.
  *
- * Отдельной защиты от эха нет и не нужно: после применения часы опубликуют
- * своё новое состояние, телефон увидит совпадение и остановится.
+ * Применённое обратно не отправляется: телефон это значение уже знает
+ * (см. DndSync.acknowledge), поэтому эха нет.
  */
 class WatchWearableService : WearableListenerService() {
 

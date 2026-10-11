@@ -53,20 +53,24 @@ class PhoneSyncService : AccessibilityService() {
 
         pending = scope.launch {
             delay(SETTLE_MS)
-            // verbose: в момент публикации нужен полный расклад правил,
-            // иначе потом не понять, кто поменял состояние.
-            val dump = ZenDump.read(this@PhoneSyncService, verbose = true)
-            val state = if (dump != null) {
-                ModeState(dnd = dump.dnd, night = dump.night)
-            } else {
-                ModeState(dnd = Zen.zen(contentResolver) != 0, night = false)
+            // Состояние читается внутри publish, под SyncLock: так оно не
+            // застанет посередине применение команды соседа.
+            sync.publish(reason) {
+                // verbose: в момент публикации нужен полный расклад правил,
+                // иначе потом не понять, кто поменял состояние.
+                val dump = ZenDump.read(this@PhoneSyncService, verbose = true)
+                val state = if (dump != null) {
+                    ModeState(dnd = dump.dnd, night = dump.night)
+                } else {
+                    ModeState(dnd = Zen.zen(contentResolver) != 0, night = false)
+                }
+                FileLog.d(
+                    TAG,
+                    "ПУБЛИКУЮ [$reason] ${Zen.describe(contentResolver)} → " +
+                        "dnd=${state.dnd} night=${state.night}",
+                )
+                state
             }
-            FileLog.d(
-                TAG,
-                "ПУБЛИКУЮ [$reason] ${Zen.describe(contentResolver)} → " +
-                    "dnd=${state.dnd} night=${state.night}",
-            )
-            sync.publish(state, reason)
         }
     }
 
